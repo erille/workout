@@ -1,0 +1,9 @@
+services:
+  workout:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: workout
+    restart: unless-stopped
+    ports:
+      - "8060:80"

@@ -66,7 +66,11 @@ export function getNextStep(
   return undefined;
 }
 
-export function createSessionStep(step: WorkoutStep, round: number): WorkoutSessionStep {
+export function createSessionStep(
+  step: WorkoutStep,
+  round: number,
+  weight?: number,
+): WorkoutSessionStep {
   return {
     id: createId("session-step"),
     exerciseId: step.exerciseId,
@@ -75,7 +79,7 @@ export function createSessionStep(step: WorkoutStep, round: number): WorkoutSess
     durationSeconds: step.type === "time" ? step.durationSeconds : undefined,
     reps: step.type === "reps" ? step.reps : undefined,
     breakSeconds: step.breakSeconds,
-    weight: step.weight,
+    weight,
     round,
     completed: true,
   };

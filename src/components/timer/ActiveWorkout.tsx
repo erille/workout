@@ -20,14 +20,21 @@ function formatTimerDisplay(totalSeconds: number): string {
   return `${minutes.toString().padStart(2, "0")}:${remainder.toString().padStart(2, "0")}`;
 }
 
-function describeStep(step?: WorkoutStep): string {
+function describeStep(step?: WorkoutStep, options?: { weight?: number }): string {
   if (!step) {
     return "No next step";
   }
 
   const target = step.type === "time" ? `${step.durationSeconds}s` : `${step.reps} reps`;
-  const weight = typeof step.weight === "number" ? ` · ${step.weight} kg` : "";
+  const selectedWeight = options ? options.weight : step.weight;
+  const weight = typeof selectedWeight === "number" ? ` - ${selectedWeight} kg` : "";
   return `${step.exerciseName} · ${target}${weight}`;
+}
+
+function parseOptionalWeight(value: string): number | undefined {
+  const parsed = Number(value);
+
+  return value === "" || !Number.isFinite(parsed) ? undefined : Math.max(0, parsed);
 }
 
 function PlanChooser({
@@ -113,12 +120,14 @@ function WorkoutRunner({
     completedSession,
     completeRepsStep,
     currentStep,
+    currentStepWeight,
     nextStep,
     pauseWorkout,
     resumeWorkout,
     startWorkout,
     state,
     stopWorkout,
+    updateCurrentStepWeight,
   } = useWorkoutTimer({
     plan,
     settings,
@@ -135,6 +144,11 @@ function WorkoutRunner({
   const totalStepCount = plan.steps.length * plan.rounds;
   const progressPercent =
     totalStepCount === 0 ? 0 : Math.min(100, Math.round((completedStepCount / totalStepCount) * 100));
+  const canAdjustWeight =
+    Boolean(currentStep) &&
+    state.phase !== "idle" &&
+    state.phase !== "stopped" &&
+    state.phase !== "completed";
 
   return (
     <section className="space-y-5">
@@ -181,7 +195,7 @@ function WorkoutRunner({
                   ? "Ready to start"
                   : state.phase === "stopped"
                     ? "Workout stopped"
-                    : describeStep(currentStep)}
+                    : describeStep(currentStep, { weight: currentStepWeight })}
               </p>
             </div>
 
@@ -257,6 +271,20 @@ function WorkoutRunner({
                 {currentStep ? formatSeconds(currentStep.breakSeconds) : "0s"}
               </p>
             </div>
+            {canAdjustWeight ? (
+              <label className="block rounded-lg border border-slate-800 bg-slate-950/60 p-4">
+                <span className="label">Actual weight kg</span>
+                <input
+                  className="field mt-2"
+                  min={0}
+                  placeholder="Optional"
+                  step={0.5}
+                  type="number"
+                  value={currentStepWeight ?? ""}
+                  onChange={(event) => updateCurrentStepWeight(parseOptionalWeight(event.target.value))}
+                />
+              </label>
+            ) : null}
             <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-4">
               <p className="label">Voice</p>
               <p className="mt-2 text-sm text-slate-300">

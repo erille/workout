@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AppSettings } from "../models/settings";
-import type { WorkoutSession } from "../models/session";
+import type { WorkoutSession, WorkoutSessionStep } from "../models/session";
 import type { WorkoutPlan } from "../models/workout";
 import {
   createSessionStep,
@@ -38,6 +38,13 @@ type UseWorkoutTimerOptions = {
   onComplete: (session: WorkoutSession) => void | Promise<void>;
 };
 
+type RuntimeWeightMap = Record<string, number | null>;
+
+type CompletedStepRecord = {
+  key: string;
+  step: WorkoutSessionStep;
+};
+
 function createInitialState(plan: WorkoutPlan): WorkoutRuntimeState {
   return {
     phase: "idle",
@@ -52,13 +59,33 @@ function isCountdownPhase(phase: TimerPhase): boolean {
   return phase === "exercise_time" || phase === "break";
 }
 
+function createStepKey(round: number, stepIndex: number): string {
+  return `${round}:${stepIndex}`;
+}
+
+function resolveStepWeight(
+  weights: RuntimeWeightMap,
+  key: string,
+  defaultWeight?: number,
+): number | undefined {
+  if (!Object.prototype.hasOwnProperty.call(weights, key)) {
+    return defaultWeight;
+  }
+
+  const weight = weights[key];
+
+  return weight === null ? undefined : weight;
+}
+
 export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerOptions) {
   const [state, setState] = useState<WorkoutRuntimeState>(() => createInitialState(plan));
   const [completedSession, setCompletedSession] = useState<WorkoutSession | null>(null);
+  const [runtimeWeights, setRuntimeWeights] = useState<RuntimeWeightMap>({});
   const stateRef = useRef(state);
+  const runtimeWeightsRef = useRef<RuntimeWeightMap>({});
   const targetEndTimeRef = useRef<number | null>(null);
   const completedStepKeysRef = useRef<Set<string>>(new Set());
-  const completedStepsRef = useRef<WorkoutSession["steps"]>([]);
+  const completedStepRecordsRef = useRef<CompletedStepRecord[]>([]);
   const sessionSavedRef = useRef(false);
 
   useEffect(() => {
@@ -67,9 +94,11 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
 
   useEffect(() => {
     targetEndTimeRef.current = null;
+    runtimeWeightsRef.current = {};
     completedStepKeysRef.current = new Set();
-    completedStepsRef.current = [];
+    completedStepRecordsRef.current = [];
     sessionSavedRef.current = false;
+    setRuntimeWeights({});
     setCompletedSession(null);
     setState(createInitialState(plan));
     cancelSpeech();
@@ -92,7 +121,7 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
 
   const recordStepCompletion = useCallback(
     (round: number, stepIndex: number) => {
-      const key = `${round}:${stepIndex}`;
+      const key = createStepKey(round, stepIndex);
       const step = plan.steps[stepIndex];
 
       if (!step || completedStepKeysRef.current.has(key)) {
@@ -100,7 +129,17 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
       }
 
       completedStepKeysRef.current.add(key);
-      completedStepsRef.current = [...completedStepsRef.current, createSessionStep(step, round)];
+      completedStepRecordsRef.current = [
+        ...completedStepRecordsRef.current,
+        {
+          key,
+          step: createSessionStep(
+            step,
+            round,
+            resolveStepWeight(runtimeWeightsRef.current, key, step.weight),
+          ),
+        },
+      ];
     },
     [plan.steps],
   );
@@ -117,7 +156,7 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
       plan,
       startedAt,
       completedAt,
-      completedStepsRef.current,
+      completedStepRecordsRef.current.map((record) => record.step),
     );
 
     sessionSavedRef.current = true;
@@ -276,7 +315,9 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
 
     const startedAt = new Date().toISOString();
     completedStepKeysRef.current = new Set();
-    completedStepsRef.current = [];
+    completedStepRecordsRef.current = [];
+    runtimeWeightsRef.current = {};
+    setRuntimeWeights({});
     sessionSavedRef.current = false;
     setCompletedSession(null);
     setState({
@@ -350,7 +391,37 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
     moveToBreak(current.currentRound, current.currentStepIndex);
   }, [moveToBreak]);
 
+  const updateCurrentStepWeight = useCallback((weight: number | undefined) => {
+    const current = stateRef.current;
+    const key = createStepKey(current.currentRound, current.currentStepIndex);
+    const nextWeights = {
+      ...runtimeWeightsRef.current,
+      [key]: typeof weight === "number" ? weight : null,
+    };
+
+    runtimeWeightsRef.current = nextWeights;
+    setRuntimeWeights(nextWeights);
+    completedStepRecordsRef.current = completedStepRecordsRef.current.map((record) =>
+      record.key === key
+        ? {
+            ...record,
+            step: {
+              ...record.step,
+              weight,
+            },
+          }
+        : record,
+    );
+  }, []);
+
   const currentStep = plan.steps[state.currentStepIndex];
+  const currentStepWeight = currentStep
+    ? resolveStepWeight(
+        runtimeWeights,
+        createStepKey(state.currentRound, state.currentStepIndex),
+        currentStep.weight,
+      )
+    : undefined;
   const nextStep = useMemo(
     () => getNextStep(plan, state.currentStepIndex, state.currentRound),
     [plan, state.currentRound, state.currentStepIndex],
@@ -359,6 +430,7 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
   return {
     state,
     currentStep,
+    currentStepWeight,
     nextStep,
     completedSession,
     startWorkout,
@@ -366,5 +438,6 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
     resumeWorkout,
     stopWorkout,
     completeRepsStep,
+    updateCurrentStepWeight,
   };
 }

@@ -41,6 +41,7 @@ type StepDefaults = {
   durationSeconds: number;
   reps: number;
   breakSeconds: number;
+  weight?: number;
 };
 
 const emptyDraft: DraftPlan = {
@@ -65,6 +66,7 @@ function createStepFromExercise(exercise: Exercise, defaults: StepDefaults): Wor
     exerciseId: exercise.id,
     exerciseName: exercise.name,
     breakSeconds: defaults.breakSeconds,
+    weight: defaults.weight,
   };
 
   if (exercise.defaultMode === "time") {
@@ -83,7 +85,16 @@ function createStepFromExercise(exercise: Exercise, defaults: StepDefaults): Wor
 }
 
 function getStepTarget(step: WorkoutStep): string {
-  return step.type === "time" ? `${step.durationSeconds}s` : `${step.reps} reps`;
+  const target = step.type === "time" ? `${step.durationSeconds}s` : `${step.reps} reps`;
+  const weight = typeof step.weight === "number" ? ` - ${step.weight} kg` : "";
+
+  return `${target}${weight}`;
+}
+
+function parseOptionalWeight(value: string): number | undefined {
+  const parsed = Number(value);
+
+  return value === "" || !Number.isFinite(parsed) ? undefined : Math.max(0, parsed);
 }
 
 type SortableStepProps = {
@@ -209,20 +220,18 @@ function SortableStep({
           </label>
 
           <label className="space-y-2">
-            <span className="label">Weight</span>
+            <span className="label">Weight kg</span>
             <input
               className="field"
               min={0}
+              step={0.5}
               placeholder="Optional"
               type="number"
               value={step.weight ?? ""}
               onChange={(event) => {
-                const nextWeight =
-                  event.target.value === "" ? undefined : Math.max(0, Number(event.target.value));
-
                 onUpdate(step.id, (current) => ({
                   ...current,
-                  weight: nextWeight,
+                  weight: parseOptionalWeight(event.target.value),
                 }));
               }}
             />
@@ -240,8 +249,9 @@ function SortableStep({
       </div>
 
       <div className="mt-3 text-xs text-slate-500">
-        Defaults while adding: {defaults.durationSeconds}s · {defaults.reps} reps ·{" "}
+        Defaults while adding: {defaults.durationSeconds}s - {defaults.reps} reps -{" "}
         {defaults.breakSeconds}s break
+        {typeof defaults.weight === "number" ? ` - ${defaults.weight} kg` : ""}
       </div>
     </article>
   );
@@ -527,7 +537,7 @@ export function WorkoutBuilder({
             </label>
           </div>
 
-          <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_8rem_8rem_8rem_auto] lg:items-end">
+          <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_8rem_8rem_8rem_9rem_auto] lg:items-end">
             <label className="space-y-2">
               <span className="label">Exercise</span>
               <select
@@ -583,6 +593,23 @@ export function WorkoutBuilder({
                   setDefaults((current) => ({
                     ...current,
                     breakSeconds: Math.max(0, Math.round(Number(event.target.value))),
+                  }))
+                }
+              />
+            </label>
+            <label className="space-y-2">
+              <span className="label">Weight kg</span>
+              <input
+                className="field"
+                min={0}
+                step={0.5}
+                placeholder="Optional"
+                type="number"
+                value={defaults.weight ?? ""}
+                onChange={(event) =>
+                  setDefaults((current) => ({
+                    ...current,
+                    weight: parseOptionalWeight(event.target.value),
                   }))
                 }
               />

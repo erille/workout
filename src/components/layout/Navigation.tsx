@@ -2,6 +2,7 @@ import {
   Dumbbell,
   Globe2,
   History,
+  Info,
   Library,
   ListChecks,
   LogIn,
@@ -9,6 +10,7 @@ import {
   Settings,
   Timer,
 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import type { Language } from "../../i18n/translations";
 import type { TranslationKey } from "../../i18n/translations";
 import { useI18n } from "../../i18n/I18nContext";
@@ -48,12 +50,39 @@ export function Navigation({
   onNavigate,
 }: NavigationProps) {
   const { t } = useI18n();
+  const [isAboutOpen, setIsAboutOpen] = useState(false);
+  const aboutRef = useRef<HTMLDivElement>(null);
   const modeLabel =
     storageMode === "local"
       ? t("auth.localMode")
       : authEnabled
         ? t("auth.privateMode")
         : t("auth.serverMode");
+
+  useEffect(() => {
+    if (!isAboutOpen) {
+      return undefined;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!aboutRef.current?.contains(event.target as Node)) {
+        setIsAboutOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsAboutOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isAboutOpen]);
 
   return (
     <header className="sticky top-0 z-20 border-b border-slate-800/90 bg-slate-950/88 backdrop-blur">
@@ -72,6 +101,36 @@ export function Navigation({
             <span className="rounded-md border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm font-semibold text-slate-300">
               {modeLabel}
             </span>
+            <div ref={aboutRef} className="relative">
+              <button
+                type="button"
+                className="secondary-button px-3"
+                aria-controls="about-popover"
+                aria-expanded={isAboutOpen}
+                onClick={() => setIsAboutOpen((current) => !current)}
+              >
+                <Info aria-hidden="true" size={17} />
+                {t("common.about")}
+              </button>
+              {isAboutOpen ? (
+                <div
+                  id="about-popover"
+                  className="absolute right-0 top-full z-30 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-md border border-slate-700 bg-slate-900 p-4 text-sm text-slate-300 shadow-2xl"
+                >
+                  <span className="absolute -top-1 right-6 h-2 w-2 rotate-45 border-l border-t border-slate-700 bg-slate-900" />
+                  This site uses{" "}
+                  <a
+                    className="font-semibold text-cyan-200 underline-offset-4 hover:text-cyan-100 hover:underline"
+                    href="https://github.com/erille/workout"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Workout
+                  </a>
+                  , a project by Ketah.
+                </div>
+              ) : null}
+            </div>
             <button
               type="button"
               className="secondary-button px-3"

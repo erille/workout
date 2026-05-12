@@ -65,6 +65,16 @@ WORKOUT_PASSWORD_HASH='$argon2id$...'
 WORKOUT_AUTH_SECRET=replace-with-a-long-random-string
 ```
 
+## Demo Data
+
+After rebuilding the image, seed sample workout plans and history into `/srv/webdata/workout/workout.sqlite`:
+
+```bash
+docker compose run --rm workout npm run seed:demo
+```
+
+The command replaces only previous demo rows with `demo-` IDs and keeps real app data intact.
+
 ## Build Command
 
 ```bash

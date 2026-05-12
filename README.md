@@ -180,6 +180,16 @@ Inside the container this path is mounted as `/data/workout.sqlite`.
 
 Existing browser localStorage data is migrated into SQLite on first API-backed load.
 
+## Demo data
+
+Generate sample workout plans and completed history in the configured SQLite database:
+
+```bash
+npm run seed:demo
+```
+
+The command replaces only previous demo rows with `demo-` IDs and keeps real app data intact.
+
 ## Login
 
 Authentication is enabled when `WORKOUT_PASSWORD_HASH` is set in `.env` or the server environment.

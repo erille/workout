@@ -1,5 +1,6 @@
 import type { WorkoutSession, WorkoutSessionStep } from "../models/session";
 import type { Language } from "../i18n/translations";
+import { translateExerciseName } from "../i18n/exerciseNames";
 import type { WorkoutPlan, WorkoutStep } from "../models/workout";
 import { createId } from "../utils/id";
 
@@ -64,15 +65,16 @@ function pickTemplate(templates: string[], seed: number): string {
 
 export function getStepAnnouncement(step: WorkoutStep, language: Language): string {
   const templates = voiceTemplates[language];
+  const exerciseName = translateExerciseName(step, language);
 
   if (step.type === "time") {
     return pickTemplate(templates.time, step.exerciseName.length + step.durationSeconds)
-      .replace("{exercise}", step.exerciseName)
+      .replace("{exercise}", exerciseName)
       .replace("{duration}", String(step.durationSeconds));
   }
 
   return pickTemplate(templates.reps, step.exerciseName.length + step.reps)
-    .replace("{exercise}", step.exerciseName)
+    .replace("{exercise}", exerciseName)
     .replace("{reps}", String(step.reps));
 }
 

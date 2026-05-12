@@ -35,6 +35,7 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
   const [message, setMessage] = useState<string | null>(null);
   const [voices, setVoices] = useState<SpeechVoiceOption[]>([]);
   const speechSupported = isSpeechSupported();
+  const hasFrenchVoice = voices.some((voice) => voice.lang.toLowerCase().startsWith("fr"));
 
   useEffect(() => {
     setDraft(settings);
@@ -111,7 +112,12 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
           <select
             className="field"
             value={draft.language}
-            onChange={(event) => updateDraft({ language: event.target.value as Language })}
+            onChange={(event) =>
+              updateDraft({
+                language: event.target.value as Language,
+                voiceURI: undefined,
+              })
+            }
           >
             <option value="en">{t("settings.languageEnglish")}</option>
             <option value="fr">{t("settings.languageFrench")}</option>
@@ -149,6 +155,9 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
                 })
               : t("settings.noVoices")}
           </p>
+          {draft.language === "fr" && voices.length > 0 && !hasFrenchVoice ? (
+            <p className="text-sm text-amber-200">{t("settings.noFrenchVoice")}</p>
+          ) : null}
         </label>
 
         <div className="grid gap-5 sm:grid-cols-3">
@@ -222,6 +231,7 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
             onClick={() =>
               speak(t("settings.previewText"), {
                 voiceURI: draft.voiceURI,
+                language: draft.language,
                 rate: draft.voiceRate,
                 pitch: draft.voicePitch,
                 volume: draft.voiceVolume,

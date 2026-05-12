@@ -24,13 +24,29 @@ docker-compose.yml
 
 ## Data Persistence
 
-SQLite is stored at:
+SQLite is stored inside the container at:
 
 ```text
 /data/workout.sqlite
 ```
 
-`docker-compose.yml` must mount `/data` as a named volume so workouts and history survive container rebuilds.
+`docker-compose.yml` must bind-mount `/data` to the host path:
+
+```text
+/srv/webdata/workout
+```
+
+On the server, the database should therefore live at:
+
+```text
+/srv/webdata/workout/workout.sqlite
+```
+
+Create the host folder before starting the container if Docker cannot create it automatically:
+
+```bash
+sudo mkdir -p /srv/webdata/workout
+```
 
 ## Build Command
 

@@ -18,6 +18,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Plus, Play, Save, Trash2 } from "lucide-react";
 import { FormEvent, useMemo, useState } from "react";
 import { useI18n } from "../../i18n/I18nContext";
+import { translateExerciseName } from "../../i18n/exerciseNames";
 import type { Exercise } from "../../models/exercise";
 import type { WorkoutPlan, WorkoutStep } from "../../models/workout";
 import { createId } from "../../utils/id";
@@ -115,7 +116,7 @@ function SortableStep({
   onRemove,
   onUpdate,
 }: SortableStepProps) {
-  const { t } = useI18n();
+  const { language, t } = useI18n();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: step.id,
   });
@@ -146,7 +147,9 @@ function SortableStep({
           <p className="text-sm font-semibold text-cyan-200">
             {t("builder.step", { number: index + 1 })}
           </p>
-          <h3 className="break-words text-lg font-bold text-slate-50">{step.exerciseName}</h3>
+          <h3 className="break-words text-lg font-bold text-slate-50">
+            {translateExerciseName(step, language)}
+          </h3>
           <p className="text-sm text-slate-400">{getStepTarget(step, t("common.reps"))}</p>
         </div>
 
@@ -271,7 +274,7 @@ export function WorkoutBuilder({
   onStartPlan,
   plans,
 }: WorkoutBuilderProps) {
-  const { t } = useI18n();
+  const { language, t } = useI18n();
   const [draft, setDraft] = useState<DraftPlan>({
     ...emptyDraft,
     name: t("builder.defaultName"),
@@ -301,9 +304,10 @@ export function WorkoutBuilder({
     }
 
     return exercises.filter((exercise) =>
-      exercise.name.toLowerCase().includes(normalizedQuery),
+      exercise.name.toLowerCase().includes(normalizedQuery) ||
+      translateExerciseName(exercise, language).toLowerCase().includes(normalizedQuery),
     );
-  }, [exercises, query]);
+  }, [exercises, language, query]);
 
   const selectedExercise = exercises.find((exercise) => exercise.id === selectedExerciseId);
 
@@ -317,7 +321,7 @@ export function WorkoutBuilder({
     }
 
     updateDraftSteps((steps) => [...steps, createStepFromExercise(selectedExercise, defaults)]);
-    setMessage(t("builder.added", { name: selectedExercise.name }));
+    setMessage(t("builder.added", { name: translateExerciseName(selectedExercise, language) }));
   };
 
   const updateStep = (stepId: string, update: (step: WorkoutStep) => WorkoutStep) => {
@@ -560,7 +564,7 @@ export function WorkoutBuilder({
               >
                 {exercises.map((exercise) => (
                   <option key={exercise.id} value={exercise.id}>
-                    {exercise.name}
+                    {translateExerciseName(exercise, language)}
                   </option>
                 ))}
               </select>
@@ -655,7 +659,7 @@ export function WorkoutBuilder({
                     setQuery("");
                   }}
                 >
-                  {exercise.name}
+                  {translateExerciseName(exercise, language)}
                 </button>
               ))}
             </div>

@@ -1,5 +1,8 @@
+import type { Language } from "../i18n/translations";
+
 export type SpeakOptions = {
   voiceURI?: string;
+  language?: Language;
   rate?: number;
   pitch?: number;
   volume?: number;
@@ -19,6 +22,30 @@ function clamp(value: number | undefined, min: number, max: number, fallback: nu
   }
 
   return Math.min(max, Math.max(min, value));
+}
+
+function speechLanguageCode(language?: Language): string {
+  return language === "fr" ? "fr-FR" : "en-US";
+}
+
+function resolveVoice(options?: SpeakOptions): SpeechSynthesisVoice | undefined {
+  const voices = window.speechSynthesis.getVoices();
+
+  if (options?.voiceURI) {
+    const selectedVoice = voices.find((voice) => voice.voiceURI === options.voiceURI);
+
+    if (selectedVoice) {
+      return selectedVoice;
+    }
+  }
+
+  const targetLanguage = speechLanguageCode(options?.language).toLowerCase();
+  const languagePrefix = targetLanguage.split("-")[0];
+
+  return (
+    voices.find((voice) => voice.lang.toLowerCase() === targetLanguage) ??
+    voices.find((voice) => voice.lang.toLowerCase().startsWith(`${languagePrefix}-`))
+  );
 }
 
 export function isSpeechSupported(): boolean {
@@ -59,16 +86,13 @@ export function speak(text: string, options?: SpeakOptions): void {
   cancelSpeech();
 
   const utterance = new SpeechSynthesisUtterance(text);
-  const voice = options?.voiceURI
-    ? window.speechSynthesis
-        .getVoices()
-        .find((availableVoice) => availableVoice.voiceURI === options.voiceURI)
-    : undefined;
+  const voice = resolveVoice(options);
 
   if (voice) {
     utterance.voice = voice;
   }
 
+  utterance.lang = voice?.lang ?? speechLanguageCode(options?.language);
   utterance.rate = clamp(options?.rate, 0.5, 2, 1);
   utterance.pitch = clamp(options?.pitch, 0, 2, 1);
   utterance.volume = clamp(options?.volume, 0, 1, 1);

@@ -173,8 +173,10 @@ The production app stores exercises, workout plans, completed sessions, and sett
 The database file lives in the Docker volume mounted at:
 
 ```text
-/data/workout.sqlite
+/srv/webdata/workout/workout.sqlite
 ```
+
+Inside the container this path is mounted as `/data/workout.sqlite`.
 
 Existing browser localStorage data is migrated into SQLite on first API-backed load.
 
@@ -185,7 +187,7 @@ The app must include:
 - `Dockerfile`
 - `docker-compose.yml`
 - Node production server
-- SQLite volume
+- SQLite bind mount at `/srv/webdata/workout`
 - Port mapping to `8060`
 
 Expected command:

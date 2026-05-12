@@ -1,6 +1,7 @@
 import { Search, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useI18n } from "../../i18n/I18nContext";
+import { translateExerciseName } from "../../i18n/exerciseNames";
 import type { WorkoutSession, WorkoutSessionStep } from "../../models/session";
 import { formatDateTime, formatSeconds, getElapsedSeconds } from "../../utils/format";
 
@@ -16,7 +17,7 @@ function stepLabel(step: WorkoutSessionStep, repsLabel: string): string {
 }
 
 export function WorkoutHistory({ onDeleteSession, sessions }: WorkoutHistoryProps) {
-  const { t } = useI18n();
+  const { language, t } = useI18n();
   const [query, setQuery] = useState("");
 
   const filteredSessions = useMemo(() => {
@@ -29,10 +30,15 @@ export function WorkoutHistory({ onDeleteSession, sessions }: WorkoutHistoryProp
     return sessions.filter((session) => {
       return (
         session.workoutName.toLowerCase().includes(normalizedQuery) ||
-        session.steps.some((step) => step.exerciseName.toLowerCase().includes(normalizedQuery))
+        session.steps.some((step) => {
+          return (
+            step.exerciseName.toLowerCase().includes(normalizedQuery) ||
+            translateExerciseName(step, language).toLowerCase().includes(normalizedQuery)
+          );
+        })
       );
     });
-  }, [query, sessions]);
+  }, [language, query, sessions]);
 
   return (
     <section className="space-y-5">
@@ -101,7 +107,9 @@ export function WorkoutHistory({ onDeleteSession, sessions }: WorkoutHistoryProp
                     <p className="text-xs font-semibold uppercase text-cyan-200">
                       {t("common.round")} {step.round}
                     </p>
-                    <p className="font-semibold text-slate-50">{step.exerciseName}</p>
+                    <p className="font-semibold text-slate-50">
+                      {translateExerciseName(step, language)}
+                    </p>
                     <p className="text-sm text-slate-400">{stepLabel(step, t("common.reps"))}</p>
                   </div>
                 ))}

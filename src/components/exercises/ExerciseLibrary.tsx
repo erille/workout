@@ -1,6 +1,7 @@
 import { Edit3, Plus, Save, Search, Trash2, X } from "lucide-react";
 import { FormEvent, useMemo, useState } from "react";
 import { useI18n } from "../../i18n/I18nContext";
+import { translateExerciseName } from "../../i18n/exerciseNames";
 import {
   exerciseCategories,
   type Exercise,
@@ -53,7 +54,7 @@ export function ExerciseLibrary({
   onDeleteExercise,
   onSaveExercise,
 }: ExerciseLibraryProps) {
-  const { t } = useI18n();
+  const { language, t } = useI18n();
   const [query, setQuery] = useState("");
   const [form, setForm] = useState<ExerciseFormState>(emptyForm);
   const [error, setError] = useState<string | null>(null);
@@ -67,13 +68,16 @@ export function ExerciseLibrary({
     }
 
     return exercises.filter((exercise) => {
+      const translatedName = translateExerciseName(exercise, language).toLowerCase();
+
       return (
         exercise.name.toLowerCase().includes(normalizedQuery) ||
+        translatedName.includes(normalizedQuery) ||
         exercise.category.toLowerCase().includes(normalizedQuery) ||
         exercise.defaultMode.includes(normalizedQuery)
       );
     });
-  }, [exercises, query]);
+  }, [exercises, language, query]);
 
   const resetForm = () => {
     setForm(emptyForm);
@@ -162,7 +166,9 @@ export function ExerciseLibrary({
             <article key={exercise.id} className="panel flex flex-col gap-4 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h3 className="text-lg font-semibold text-slate-50">{exercise.name}</h3>
+                  <h3 className="text-lg font-semibold text-slate-50">
+                    {translateExerciseName(exercise, language)}
+                  </h3>
                   <p className="text-sm text-slate-400">
                     {t(`category.${exercise.category}`)} -{" "}
                     {exercise.defaultMode === "time" ? t("common.time") : t("common.reps")}

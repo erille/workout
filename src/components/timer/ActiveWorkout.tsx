@@ -1,5 +1,7 @@
 import { Check, Pause, Play, RotateCcw, Square, TimerReset } from "lucide-react";
 import { useI18n } from "../../i18n/I18nContext";
+import { translateExerciseName } from "../../i18n/exerciseNames";
+import type { Language } from "../../i18n/translations";
 import type { AppSettings } from "../../models/settings";
 import type { WorkoutSession } from "../../models/session";
 import type { WorkoutPlan, WorkoutStep } from "../../models/workout";
@@ -24,6 +26,7 @@ function formatTimerDisplay(totalSeconds: number): string {
 function describeStep(
   step: WorkoutStep | undefined,
   noStepLabel: string,
+  language: Language,
   options?: { weight?: number },
 ): string {
   if (!step) {
@@ -33,7 +36,7 @@ function describeStep(
   const target = step.type === "time" ? `${step.durationSeconds}s` : `${step.reps} reps`;
   const selectedWeight = options ? options.weight : step.weight;
   const weight = typeof selectedWeight === "number" ? ` - ${selectedWeight} kg` : "";
-  return `${step.exerciseName} - ${target}${weight}`;
+  return `${translateExerciseName(step, language)} - ${target}${weight}`;
 }
 
 function parseOptionalWeight(value: string): number | undefined {
@@ -46,7 +49,7 @@ function PlanChooser({
   plans,
   onSelectPlan,
 }: Pick<ActiveWorkoutProps, "plans" | "onSelectPlan">) {
-  const { t } = useI18n();
+  const { language, t } = useI18n();
 
   return (
     <section className="space-y-4">
@@ -82,7 +85,7 @@ function PlanChooser({
 }
 
 function SessionSummary({ session }: { session: WorkoutSession }) {
-  const { t } = useI18n();
+  const { language, t } = useI18n();
 
   return (
     <div className="panel p-4">
@@ -106,7 +109,7 @@ function SessionSummary({ session }: { session: WorkoutSession }) {
             <p className="text-xs font-semibold uppercase text-cyan-200">
               {t("common.round")} {step.round}
             </p>
-            <p className="font-semibold text-slate-50">{step.exerciseName}</p>
+            <p className="font-semibold text-slate-50">{translateExerciseName(step, language)}</p>
             <p className="text-sm text-slate-400">
               {step.type === "time" ? `${step.durationSeconds}s` : `${step.reps} ${t("common.reps")}`}
               {typeof step.weight === "number" ? ` - ${step.weight} kg` : ""}
@@ -129,7 +132,7 @@ function WorkoutRunner({
   onSelectPlan: (plan: WorkoutPlan | null) => void;
   onSessionComplete: (session: WorkoutSession) => void | Promise<void>;
 }) {
-  const { t } = useI18n();
+  const { language, t } = useI18n();
   const {
     completedSession,
     completeRepsStep,
@@ -206,14 +209,20 @@ function WorkoutRunner({
                       : t("common.exercise")}
               </p>
               <h3 className="break-words text-3xl font-black text-slate-50 sm:text-4xl">
-                {state.phase === "break" ? t("timer.recover") : currentStep?.exerciseName ?? plan.name}
+                {state.phase === "break"
+                  ? t("timer.recover")
+                  : currentStep
+                    ? translateExerciseName(currentStep, language)
+                    : plan.name}
               </h3>
               <p className="text-base text-slate-400">
                 {state.phase === "idle"
                   ? t("timer.ready")
                   : state.phase === "stopped"
                     ? t("timer.stopped")
-                    : describeStep(currentStep, t("timer.noNext"), { weight: currentStepWeight })}
+                    : describeStep(currentStep, t("timer.noNext"), language, {
+                        weight: currentStepWeight,
+                      })}
               </p>
             </div>
 
@@ -282,7 +291,7 @@ function WorkoutRunner({
             <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-4">
               <p className="label">{t("timer.next")}</p>
               <p className="mt-2 text-lg font-semibold text-slate-50">
-                {describeStep(nextStep, t("timer.noNext"))}
+                {describeStep(nextStep, t("timer.noNext"), language)}
               </p>
             </div>
             <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-4">

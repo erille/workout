@@ -20,6 +20,7 @@ const en = {
   "common.enabled": "Enabled",
   "common.exercise": "Exercise",
   "common.local": "local",
+  "common.logout": "Logout",
   "common.remote": "remote",
   "common.default": "default",
   "common.optional": "Optional",
@@ -143,6 +144,13 @@ const en = {
   "settings.save": "Save settings",
   "settings.previewVoice": "Preview voice",
   "settings.previewText": "Next, Push-up for 45 seconds.",
+  "auth.title": "Workout login",
+  "auth.subtitle": "Enter the local app password to unlock your workouts.",
+  "auth.password": "Password",
+  "auth.passwordPlaceholder": "Password",
+  "auth.login": "Log in",
+  "auth.invalid": "Invalid password.",
+  "auth.error": "Unable to log in. Check the server and try again.",
 } as const;
 
 const fr: Record<keyof typeof en, string> = {
@@ -165,6 +173,7 @@ const fr: Record<keyof typeof en, string> = {
   "common.enabled": "Active",
   "common.exercise": "Exercice",
   "common.local": "local",
+  "common.logout": "Deconnexion",
   "common.remote": "distant",
   "common.default": "defaut",
   "common.optional": "Optionnel",
@@ -288,6 +297,13 @@ const fr: Record<keyof typeof en, string> = {
   "settings.save": "Enregistrer les reglages",
   "settings.previewVoice": "Apercu de la voix",
   "settings.previewText": "Prochain exercice, pompe pendant 45 secondes.",
+  "auth.title": "Connexion Workout",
+  "auth.subtitle": "Entre le mot de passe local pour deverrouiller tes entrainements.",
+  "auth.password": "Mot de passe",
+  "auth.passwordPlaceholder": "Mot de passe",
+  "auth.login": "Se connecter",
+  "auth.invalid": "Mot de passe invalide.",
+  "auth.error": "Connexion impossible. Verifie le serveur puis reessaie.",
 };
 
 export type TranslationKey = keyof typeof en;

@@ -48,6 +48,23 @@ Create the host folder before starting the container if Docker cannot create it 
 sudo mkdir -p /srv/webdata/workout
 ```
 
+## Authentication
+
+Docker Compose reads `WORKOUT_PASSWORD_HASH` and `WORKOUT_AUTH_SECRET` from the shell or project `.env`.
+
+Generate the password hash with:
+
+```bash
+python -c "from argon2 import PasswordHasher; import getpass; print(PasswordHasher().hash(getpass.getpass('Password: ')))"
+```
+
+Example `.env`:
+
+```text
+WORKOUT_PASSWORD_HASH='$argon2id$...'
+WORKOUT_AUTH_SECRET=replace-with-a-long-random-string
+```
+
 ## Build Command
 
 ```bash

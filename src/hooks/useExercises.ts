@@ -6,12 +6,18 @@ function sortExercises(exercises: Exercise[]): Exercise[] {
   return [...exercises].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export function useExercises() {
+export function useExercises(enabled = true) {
   const [exercises, setExercises] = useState<Exercise[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(enabled);
 
   useEffect(() => {
+    if (!enabled) {
+      setIsLoading(false);
+      return undefined;
+    }
+
     let isMounted = true;
+    setIsLoading(true);
 
     getExercises()
       .then((loadedExercises) => {
@@ -28,7 +34,7 @@ export function useExercises() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [enabled]);
 
   const persistExercises = useCallback(async (nextExercises: Exercise[]) => {
     const sortedExercises = sortExercises(nextExercises);

@@ -11,6 +11,7 @@ ENV NODE_ENV=production
 ENV PORT=8060
 ENV WORKOUT_DB_PATH=/data/workout.sqlite
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/node_modules ./node_modules
 COPY server ./server
 COPY package*.json ./
 RUN mkdir -p /data

@@ -6,12 +6,18 @@ function sortSessions(sessions: WorkoutSession[]): WorkoutSession[] {
   return [...sessions].sort((a, b) => b.startedAt.localeCompare(a.startedAt));
 }
 
-export function useSessions() {
+export function useSessions(enabled = true) {
   const [sessions, setSessions] = useState<WorkoutSession[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(enabled);
 
   useEffect(() => {
+    if (!enabled) {
+      setIsLoading(false);
+      return undefined;
+    }
+
     let isMounted = true;
+    setIsLoading(true);
 
     getSessions()
       .then((loadedSessions) => {
@@ -28,7 +34,7 @@ export function useSessions() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [enabled]);
 
   const persistSessions = useCallback(async (nextSessions: WorkoutSession[]) => {
     const sortedSessions = sortSessions(nextSessions);

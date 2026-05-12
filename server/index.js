@@ -1,12 +1,55 @@
-import { createReadStream, existsSync, mkdirSync, statSync } from "node:fs";
+import { createReadStream, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { createServer } from "node:http";
 import { dirname, extname, join, resolve, sep } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import argon2 from "argon2";
 import { defaultExercises, defaultSettings } from "./defaultData.js";
+
+function loadDotEnv() {
+  const envPath = resolve(".env");
+
+  if (!existsSync(envPath)) {
+    return;
+  }
+
+  for (const line of readFileSync(envPath, "utf8").split(/\r?\n/)) {
+    const trimmedLine = line.trim();
+
+    if (!trimmedLine || trimmedLine.startsWith("#")) {
+      continue;
+    }
+
+    const separatorIndex = trimmedLine.indexOf("=");
+
+    if (separatorIndex <= 0) {
+      continue;
+    }
+
+    const key = trimmedLine.slice(0, separatorIndex).trim();
+    let value = trimmedLine.slice(separatorIndex + 1).trim();
+
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+
+    process.env[key] ??= value;
+  }
+}
+
+loadDotEnv();
 
 const port = Number(process.env.PORT ?? 8060);
 const publicDir = resolve(process.env.WORKOUT_PUBLIC_DIR ?? "dist");
 const dbPath = resolve(process.env.WORKOUT_DB_PATH ?? join("data", "workout.sqlite"));
+const passwordHash = process.env.WORKOUT_PASSWORD_HASH?.trim() || "";
+const authEnabled = passwordHash.length > 0;
+const authSecret = process.env.WORKOUT_AUTH_SECRET?.trim() || passwordHash || "workout-dev-secret";
+const sessionCookieName = "workout_session";
+const sessionMaxAgeSeconds = 60 * 60 * 24 * 7;
 const allowedTables = new Set(["exercises", "plans", "sessions"]);
 
 mkdirSync(dirname(dbPath), { recursive: true });
@@ -36,12 +79,14 @@ db.exec(`
   );
 `);
 
-function jsonResponse(response, statusCode, body) {
+function jsonResponse(response, statusCode, body, headers = {}) {
   response.writeHead(statusCode, {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Allow-Methods": "GET,POST,PUT,OPTIONS",
+    "Access-Control-Allow-Credentials": "true",
     "Content-Type": "application/json; charset=utf-8",
+    ...headers,
   });
   response.end(JSON.stringify(body));
 }
@@ -51,8 +96,118 @@ function emptyResponse(response, statusCode = 204) {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Allow-Methods": "GET,POST,PUT,OPTIONS",
+    "Access-Control-Allow-Credentials": "true",
   });
   response.end();
+}
+
+function parseCookies(cookieHeader = "") {
+  return Object.fromEntries(
+    cookieHeader
+      .split(";")
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map((part) => {
+        const separatorIndex = part.indexOf("=");
+        const key = separatorIndex >= 0 ? part.slice(0, separatorIndex) : part;
+        const value = separatorIndex >= 0 ? part.slice(separatorIndex + 1) : "";
+        return [key, decodeURIComponent(value)];
+      }),
+  );
+}
+
+function signPayload(payload) {
+  return createHmac("sha256", authSecret).update(payload).digest("base64url");
+}
+
+function safeEqual(left, right) {
+  const leftBuffer = Buffer.from(left);
+  const rightBuffer = Buffer.from(right);
+
+  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function createSessionToken() {
+  const payload = Buffer.from(
+    JSON.stringify({ exp: Date.now() + sessionMaxAgeSeconds * 1000 }),
+  ).toString("base64url");
+  return `${payload}.${signPayload(payload)}`;
+}
+
+function isAuthenticated(request) {
+  if (!authEnabled) {
+    return true;
+  }
+
+  const token = parseCookies(request.headers.cookie)[sessionCookieName];
+
+  if (!token) {
+    return false;
+  }
+
+  const [payload, signature] = token.split(".");
+
+  if (!payload || !signature || !safeEqual(signPayload(payload), signature)) {
+    return false;
+  }
+
+  try {
+    const session = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    return typeof session.exp === "number" && session.exp > Date.now();
+  } catch {
+    return false;
+  }
+}
+
+function sessionCookie(value, maxAge = sessionMaxAgeSeconds) {
+  const secureFlag = process.env.WORKOUT_COOKIE_SECURE === "true" ? "; Secure" : "";
+  return `${sessionCookieName}=${encodeURIComponent(value)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}${secureFlag}`;
+}
+
+async function handleAuth(request, response, pathname) {
+  if (request.method === "GET" && pathname === "/api/auth/status") {
+    jsonResponse(response, 200, {
+      authEnabled,
+      authenticated: isAuthenticated(request),
+    });
+    return true;
+  }
+
+  if (request.method === "POST" && pathname === "/api/auth/login") {
+    if (!authEnabled) {
+      jsonResponse(response, 200, { authEnabled, authenticated: true });
+      return true;
+    }
+
+    const body = await readBody(request);
+    const password = body && typeof body.password === "string" ? body.password : "";
+    const verified = password.length > 0 && (await argon2.verify(passwordHash, password));
+
+    if (!verified) {
+      jsonResponse(response, 401, { error: "Invalid password" });
+      return true;
+    }
+
+    jsonResponse(
+      response,
+      200,
+      { authEnabled, authenticated: true },
+      { "Set-Cookie": sessionCookie(createSessionToken()) },
+    );
+    return true;
+  }
+
+  if (request.method === "POST" && pathname === "/api/auth/logout") {
+    jsonResponse(
+      response,
+      200,
+      { authEnabled, authenticated: false },
+      { "Set-Cookie": sessionCookie("", 0) },
+    );
+    return true;
+  }
+
+  return false;
 }
 
 function readBody(request) {
@@ -183,8 +338,17 @@ async function handleApi(request, response, pathname) {
     return;
   }
 
+  if (await handleAuth(request, response, pathname)) {
+    return;
+  }
+
   if (request.method === "GET" && pathname === "/api/health") {
     jsonResponse(response, 200, { ok: true });
+    return;
+  }
+
+  if (!isAuthenticated(request)) {
+    jsonResponse(response, 401, { error: "Authentication required", authRequired: true });
     return;
   }
 

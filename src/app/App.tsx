@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { LoginPage } from "../components/auth/LoginPage";
 import { ExerciseLibrary } from "../components/exercises/ExerciseLibrary";
 import { WorkoutHistory } from "../components/history/WorkoutHistory";
 import { Navigation, type PageId } from "../components/layout/Navigation";
@@ -6,24 +7,36 @@ import { SettingsPage } from "../components/settings/Settings";
 import { ActiveWorkout } from "../components/timer/ActiveWorkout";
 import { WorkoutBuilder } from "../components/workout-builder/WorkoutBuilder";
 import { useExercises } from "../hooks/useExercises";
+import { useAuth } from "../hooks/useAuth";
 import { useSessions } from "../hooks/useSessions";
 import { useSettings } from "../hooks/useSettings";
 import { useWorkoutPlans } from "../hooks/useWorkoutPlans";
 import { I18nProvider, translate } from "../i18n/I18nContext";
+import type { Language } from "../i18n/translations";
 import type { WorkoutSession } from "../models/session";
 import type { WorkoutPlan } from "../models/workout";
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState<PageId>("exercises");
   const [activePlan, setActivePlan] = useState<WorkoutPlan | null>(null);
-  const { exercises, isLoading: exercisesLoading, saveExercise, deleteExercise } = useExercises();
-  const { plans, isLoading: plansLoading, savePlan, deletePlan } = useWorkoutPlans();
-  const { sessions, isLoading: sessionsLoading, addSession, deleteSession } = useSessions();
-  const { settings, isLoading: settingsLoading, updateSettings } = useSettings();
+  const [loginLanguage, setLoginLanguage] = useState<Language>(() =>
+    typeof navigator !== "undefined" && navigator.language.toLowerCase().startsWith("fr")
+      ? "fr"
+      : "en",
+  );
+  const { status: authStatus, isLoading: authLoading, login, logout } = useAuth();
+  const canLoadData = !authLoading && (!authStatus.authEnabled || authStatus.authenticated);
+  const { exercises, isLoading: exercisesLoading, saveExercise, deleteExercise } =
+    useExercises(canLoadData);
+  const { plans, isLoading: plansLoading, savePlan, deletePlan } = useWorkoutPlans(canLoadData);
+  const { sessions, isLoading: sessionsLoading, addSession, deleteSession } = useSessions(canLoadData);
+  const { settings, isLoading: settingsLoading, updateSettings } = useSettings(canLoadData);
 
-  const isLoading = exercisesLoading || plansLoading || sessionsLoading || settingsLoading;
+  const language = canLoadData ? settings.language : loginLanguage;
+  const isLoading =
+    authLoading || (canLoadData && (exercisesLoading || plansLoading || sessionsLoading || settingsLoading));
   const t = (key: Parameters<typeof translate>[1], values?: Parameters<typeof translate>[2]) =>
-    translate(settings.language, key, values);
+    translate(language, key, values);
 
   const activePlanFromStore = useMemo(() => {
     if (!activePlan) {
@@ -43,6 +56,11 @@ export default function App() {
   };
 
   const toggleLanguage = () => {
+    if (!canLoadData) {
+      setLoginLanguage((current) => (current === "fr" ? "en" : "fr"));
+      return;
+    }
+
     void updateSettings({
       ...settings,
       language: settings.language === "fr" ? "en" : "fr",
@@ -51,19 +69,27 @@ export default function App() {
   };
 
   return (
-    <I18nProvider language={settings.language}>
+    <I18nProvider language={language}>
       <div className="min-h-screen">
-        <Navigation
-          currentPage={currentPage}
-          language={settings.language}
-          onLanguageToggle={toggleLanguage}
-          onNavigate={setCurrentPage}
-        />
-        <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          {isLoading ? (
+        {isLoading ? (
+          <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
             <div className="panel p-6 text-slate-300">{t("app.loading")}</div>
-          ) : (
-            <>
+          </main>
+        ) : authStatus.authEnabled && !authStatus.authenticated ? (
+          <LoginPage language={language} onLanguageToggle={toggleLanguage} onLogin={login} />
+        ) : (
+          <>
+            <Navigation
+              authEnabled={authStatus.authEnabled}
+              currentPage={currentPage}
+              language={language}
+              onLanguageToggle={toggleLanguage}
+              onLogout={() => {
+                void logout();
+              }}
+              onNavigate={setCurrentPage}
+            />
+            <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
               {currentPage === "exercises" && (
                 <ExerciseLibrary
                   exercises={exercises}
@@ -95,9 +121,9 @@ export default function App() {
               {currentPage === "settings" && (
                 <SettingsPage settings={settings} onSaveSettings={updateSettings} />
               )}
-            </>
-          )}
-        </main>
+            </main>
+          </>
+        )}
       </div>
     </I18nProvider>
   );

@@ -180,6 +180,25 @@ Inside the container this path is mounted as `/data/workout.sqlite`.
 
 Existing browser localStorage data is migrated into SQLite on first API-backed load.
 
+## Login
+
+Authentication is enabled when `WORKOUT_PASSWORD_HASH` is set in `.env` or the server environment.
+
+Generate an Argon2 hash:
+
+```bash
+python -c "from argon2 import PasswordHasher; import getpass; print(PasswordHasher().hash(getpass.getpass('Password: ')))"
+```
+
+Then create `.env`:
+
+```text
+WORKOUT_PASSWORD_HASH='$argon2id$...'
+WORKOUT_AUTH_SECRET=replace-with-a-long-random-string
+```
+
+`WORKOUT_AUTH_SECRET` signs the HTTP-only session cookie. If it is omitted, the password hash is used as the signing secret.
+
 ## Docker
 
 The app must include:

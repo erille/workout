@@ -4,6 +4,7 @@ import {
   History,
   Library,
   ListChecks,
+  LogOut,
   Settings,
   Timer,
 } from "lucide-react";
@@ -14,9 +15,11 @@ import { useI18n } from "../../i18n/I18nContext";
 export type PageId = "exercises" | "builder" | "timer" | "history" | "settings";
 
 type NavigationProps = {
+  authEnabled: boolean;
   currentPage: PageId;
   language: Language;
   onLanguageToggle: () => void;
+  onLogout: () => void;
   onNavigate: (page: PageId) => void;
 };
 
@@ -29,9 +32,11 @@ const navItems = [
 ] satisfies Array<{ id: PageId; labelKey: TranslationKey; icon: typeof Dumbbell }>;
 
 export function Navigation({
+  authEnabled,
   currentPage,
   language,
   onLanguageToggle,
+  onLogout,
   onNavigate,
 }: NavigationProps) {
   const { t } = useI18n();
@@ -49,15 +54,23 @@ export function Navigation({
               <p className="text-sm text-slate-400">{t("nav.subtitle")}</p>
             </div>
           </div>
-          <button
-            type="button"
-            className="secondary-button px-3"
-            aria-label={t("nav.languageToggle")}
-            onClick={onLanguageToggle}
-          >
-            <Globe2 aria-hidden="true" size={17} />
-            {language.toUpperCase()}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="secondary-button px-3"
+              aria-label={t("nav.languageToggle")}
+              onClick={onLanguageToggle}
+            >
+              <Globe2 aria-hidden="true" size={17} />
+              {language.toUpperCase()}
+            </button>
+            {authEnabled ? (
+              <button type="button" className="secondary-button px-3" onClick={onLogout}>
+                <LogOut aria-hidden="true" size={17} />
+                {t("common.logout")}
+              </button>
+            ) : null}
+          </div>
         </div>
         <nav className="flex gap-2 overflow-x-auto pb-1" aria-label={t("nav.aria")}>
           {navItems.map(({ id, labelKey, icon: Icon }) => {

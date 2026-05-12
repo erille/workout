@@ -6,12 +6,18 @@ function sortPlans(plans: WorkoutPlan[]): WorkoutPlan[] {
   return [...plans].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
-export function useWorkoutPlans() {
+export function useWorkoutPlans(enabled = true) {
   const [plans, setPlans] = useState<WorkoutPlan[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(enabled);
 
   useEffect(() => {
+    if (!enabled) {
+      setIsLoading(false);
+      return undefined;
+    }
+
     let isMounted = true;
+    setIsLoading(true);
 
     getWorkoutPlans()
       .then((loadedPlans) => {
@@ -28,7 +34,7 @@ export function useWorkoutPlans() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [enabled]);
 
   const persistPlans = useCallback(async (nextPlans: WorkoutPlan[]) => {
     const sortedPlans = sortPlans(nextPlans);

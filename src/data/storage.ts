@@ -70,6 +70,7 @@ function hasLocalWorkoutData(data: ServerData): boolean {
 async function apiJson<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...options,
+    credentials: "same-origin",
     headers: {
       "Content-Type": "application/json",
       ...options?.headers,

@@ -111,6 +111,7 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
       }
 
       speak(text, {
+        voiceURI: settings.voiceURI,
         rate: settings.voiceRate,
         pitch: settings.voicePitch,
         volume: settings.voiceVolume,

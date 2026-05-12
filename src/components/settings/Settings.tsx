@@ -1,7 +1,12 @@
 import { Save, Volume2, VolumeX } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import type { AppSettings } from "../../models/settings";
-import { isSpeechSupported, speak } from "../../services/speechService";
+import {
+  getSpeechVoices,
+  isSpeechSupported,
+  speak,
+  type SpeechVoiceOption,
+} from "../../services/speechService";
 
 type SettingsPageProps = {
   settings: AppSettings;
@@ -12,14 +17,40 @@ function numberValue(value: number): string {
   return value.toFixed(1);
 }
 
+function voiceLabel(voice: SpeechVoiceOption): string {
+  const source = voice.localService ? "local" : "remote";
+  const defaultLabel = voice.default ? ", default" : "";
+
+  return `${voice.name} (${voice.lang}, ${source}${defaultLabel})`;
+}
+
 export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
   const [draft, setDraft] = useState<AppSettings>(settings);
   const [message, setMessage] = useState<string | null>(null);
+  const [voices, setVoices] = useState<SpeechVoiceOption[]>([]);
   const speechSupported = isSpeechSupported();
 
   useEffect(() => {
     setDraft(settings);
   }, [settings]);
+
+  useEffect(() => {
+    if (!speechSupported) {
+      setVoices([]);
+      return undefined;
+    }
+
+    const refreshVoices = () => {
+      setVoices(getSpeechVoices());
+    };
+
+    refreshVoices();
+    window.speechSynthesis.addEventListener("voiceschanged", refreshVoices);
+
+    return () => {
+      window.speechSynthesis.removeEventListener("voiceschanged", refreshVoices);
+    };
+  }, [speechSupported]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -68,6 +99,32 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
             />
           </label>
         </div>
+
+        <label className="block space-y-2">
+          <span className="label">Voice</span>
+          <select
+            className="field"
+            disabled={!speechSupported || voices.length === 0}
+            value={draft.voiceURI ?? ""}
+            onChange={(event) =>
+              updateDraft({
+                voiceURI: event.target.value === "" ? undefined : event.target.value,
+              })
+            }
+          >
+            <option value="">System default</option>
+            {voices.map((voice) => (
+              <option key={voice.voiceURI} value={voice.voiceURI}>
+                {voiceLabel(voice)}
+              </option>
+            ))}
+          </select>
+          <p className="text-sm text-slate-400">
+            {voices.length > 0
+              ? `${voices.length} browser voice${voices.length === 1 ? "" : "s"} available.`
+              : "No selectable browser voices loaded yet."}
+          </p>
+        </label>
 
         <div className="grid gap-5 sm:grid-cols-3">
           <label className="space-y-3">
@@ -139,6 +196,7 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
             disabled={!speechSupported || !draft.voiceEnabled}
             onClick={() =>
               speak("Next, Push-up for 45 seconds.", {
+                voiceURI: draft.voiceURI,
                 rate: draft.voiceRate,
                 pitch: draft.voicePitch,
                 volume: draft.voiceVolume,
@@ -146,7 +204,7 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
             }
           >
             <Volume2 aria-hidden="true" size={17} />
-            Test voice
+            Preview voice
           </button>
         </div>
       </form>

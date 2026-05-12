@@ -1,5 +1,6 @@
 export type AppSettings = {
   voiceEnabled: boolean;
+  voiceURI?: string;
   voiceRate: number;
   voicePitch: number;
   voiceVolume: number;

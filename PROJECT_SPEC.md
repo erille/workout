@@ -174,6 +174,7 @@ Use Web Speech API for MVP.
 Required settings:
 
 - Enable/disable voice
+- Select browser voice
 - Voice rate
 - Voice pitch
 - Voice volume

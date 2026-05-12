@@ -1,4 +1,5 @@
 import { Check, Pause, Play, RotateCcw, Square, TimerReset } from "lucide-react";
+import { useI18n } from "../../i18n/I18nContext";
 import type { AppSettings } from "../../models/settings";
 import type { WorkoutSession } from "../../models/session";
 import type { WorkoutPlan, WorkoutStep } from "../../models/workout";
@@ -20,15 +21,19 @@ function formatTimerDisplay(totalSeconds: number): string {
   return `${minutes.toString().padStart(2, "0")}:${remainder.toString().padStart(2, "0")}`;
 }
 
-function describeStep(step?: WorkoutStep, options?: { weight?: number }): string {
+function describeStep(
+  step: WorkoutStep | undefined,
+  noStepLabel: string,
+  options?: { weight?: number },
+): string {
   if (!step) {
-    return "No next step";
+    return noStepLabel;
   }
 
   const target = step.type === "time" ? `${step.durationSeconds}s` : `${step.reps} reps`;
   const selectedWeight = options ? options.weight : step.weight;
   const weight = typeof selectedWeight === "number" ? ` - ${selectedWeight} kg` : "";
-  return `${step.exerciseName} · ${target}${weight}`;
+  return `${step.exerciseName} - ${target}${weight}`;
 }
 
 function parseOptionalWeight(value: string): number | undefined {
@@ -41,16 +46,16 @@ function PlanChooser({
   plans,
   onSelectPlan,
 }: Pick<ActiveWorkoutProps, "plans" | "onSelectPlan">) {
+  const { t } = useI18n();
+
   return (
     <section className="space-y-4">
       <div>
-        <p className="label">Timer</p>
-        <h2 className="text-2xl font-bold text-slate-50">Choose a workout</h2>
+        <p className="label">{t("nav.timer")}</p>
+        <h2 className="text-2xl font-bold text-slate-50">{t("timer.choose")}</h2>
       </div>
       {plans.length === 0 ? (
-        <div className="panel p-6 text-slate-300">
-          Create and save a workout plan in the Builder before starting the timer.
-        </div>
+        <div className="panel p-6 text-slate-300">{t("timer.createPlan")}</div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {plans.map((plan) => (
@@ -58,12 +63,15 @@ function PlanChooser({
               <div>
                 <h3 className="text-lg font-bold text-slate-50">{plan.name}</h3>
                 <p className="text-sm text-slate-400">
-                  {plan.steps.length} steps · {plan.rounds} round{plan.rounds === 1 ? "" : "s"}
+                  {plan.steps.length}{" "}
+                  {plan.steps.length === 1 ? t("common.step") : t("common.steps")} - {plan.rounds}{" "}
+                  {t("common.round").toLowerCase()}
+                  {plan.rounds === 1 ? "" : "s"}
                 </p>
               </div>
               <button type="button" className="primary-button mt-auto" onClick={() => onSelectPlan(plan)}>
                 <Play aria-hidden="true" size={18} />
-                Start workout
+                {t("timer.startWorkout")}
               </button>
             </article>
           ))}
@@ -74,29 +82,34 @@ function PlanChooser({
 }
 
 function SessionSummary({ session }: { session: WorkoutSession }) {
+  const { t } = useI18n();
+
   return (
     <div className="panel p-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="label">Session Summary</p>
+          <p className="label">{t("timer.summary")}</p>
           <h3 className="text-xl font-bold text-slate-50">{session.workoutName}</h3>
           <p className="text-sm text-slate-400">
-            {formatDateTime(session.startedAt)} · {formatSeconds(getElapsedSeconds(session.startedAt, session.completedAt))}
+            {formatDateTime(session.startedAt)} -{" "}
+            {formatSeconds(getElapsedSeconds(session.startedAt, session.completedAt))}
           </p>
         </div>
         <span className="rounded-md bg-emerald-400 px-3 py-1 text-sm font-bold text-emerald-950">
-          Saved
+          {t("common.saved")}
         </span>
       </div>
 
       <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {session.steps.map((step) => (
           <div key={step.id} className="rounded-md border border-slate-800 bg-slate-950/70 p-3">
-            <p className="text-xs font-semibold uppercase text-cyan-200">Round {step.round}</p>
+            <p className="text-xs font-semibold uppercase text-cyan-200">
+              {t("common.round")} {step.round}
+            </p>
             <p className="font-semibold text-slate-50">{step.exerciseName}</p>
             <p className="text-sm text-slate-400">
-              {step.type === "time" ? `${step.durationSeconds}s` : `${step.reps} reps`}
-              {typeof step.weight === "number" ? ` · ${step.weight} kg` : ""}
+              {step.type === "time" ? `${step.durationSeconds}s` : `${step.reps} ${t("common.reps")}`}
+              {typeof step.weight === "number" ? ` - ${step.weight} kg` : ""}
             </p>
           </div>
         ))}
@@ -116,6 +129,7 @@ function WorkoutRunner({
   onSelectPlan: (plan: WorkoutPlan | null) => void;
   onSessionComplete: (session: WorkoutSession) => void | Promise<void>;
 }) {
+  const { t } = useI18n();
   const {
     completedSession,
     completeRepsStep,
@@ -154,16 +168,20 @@ function WorkoutRunner({
     <section className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="label">Active Workout</p>
+          <p className="label">{t("timer.active")}</p>
           <h2 className="text-2xl font-bold text-slate-50">{plan.name}</h2>
           <p className="text-sm text-slate-400">
-            Round {state.currentRound} of {state.totalRounds} · Step{" "}
-            {Math.min(state.currentStepIndex + 1, plan.steps.length)} of {plan.steps.length}
+            {t("timer.roundOf", {
+              round: state.currentRound,
+              totalRounds: state.totalRounds,
+              step: Math.min(state.currentStepIndex + 1, plan.steps.length),
+              totalSteps: plan.steps.length,
+            })}
           </p>
         </div>
         <button type="button" className="secondary-button" onClick={() => onSelectPlan(null)}>
           <TimerReset aria-hidden="true" size={17} />
-          Choose plan
+          {t("timer.choosePlan")}
         </button>
       </div>
 
@@ -180,22 +198,22 @@ function WorkoutRunner({
             <div className="space-y-2">
               <p className="label">
                 {state.phase === "break"
-                  ? "Break"
+                  ? t("common.break")
                   : state.phase === "paused"
-                    ? "Paused"
+                    ? t("common.paused")
                     : state.phase === "completed"
-                      ? "Complete"
-                      : "Exercise"}
+                      ? t("common.complete")
+                      : t("common.exercise")}
               </p>
               <h3 className="break-words text-3xl font-black text-slate-50 sm:text-4xl">
-                {state.phase === "break" ? "Recover" : currentStep?.exerciseName ?? plan.name}
+                {state.phase === "break" ? t("timer.recover") : currentStep?.exerciseName ?? plan.name}
               </h3>
               <p className="text-base text-slate-400">
                 {state.phase === "idle"
-                  ? "Ready to start"
+                  ? t("timer.ready")
                   : state.phase === "stopped"
-                    ? "Workout stopped"
-                    : describeStep(currentStep, { weight: currentStepWeight })}
+                    ? t("timer.stopped")
+                    : describeStep(currentStep, t("timer.noNext"), { weight: currentStepWeight })}
               </p>
             </div>
 
@@ -205,7 +223,7 @@ function WorkoutRunner({
                   <div className="text-7xl font-black tracking-normal text-cyan-200 sm:text-8xl">
                     {currentStep.reps}
                   </div>
-                  <p className="mt-2 text-xl font-semibold text-slate-300">reps</p>
+                  <p className="mt-2 text-xl font-semibold text-slate-300">{t("common.reps")}</p>
                 </div>
               ) : (
                 <div className="text-7xl font-black tracking-normal text-cyan-200 sm:text-8xl">
@@ -222,25 +240,25 @@ function WorkoutRunner({
                   ) : (
                     <Play aria-hidden="true" size={20} />
                   )}
-                  {state.phase === "completed" ? "Restart" : "Start"}
+                  {state.phase === "completed" ? t("timer.restart") : t("common.start")}
                 </button>
               )}
               {isRunning ? (
                 <button type="button" className="secondary-button min-h-14" onClick={pauseWorkout}>
                   <Pause aria-hidden="true" size={20} />
-                  Pause
+                  {t("common.pause")}
                 </button>
               ) : null}
               {state.phase === "paused" ? (
                 <button type="button" className="primary-button min-h-14" onClick={resumeWorkout}>
                   <Play aria-hidden="true" size={20} />
-                  Resume
+                  {t("timer.resume")}
                 </button>
               ) : null}
               {state.phase === "exercise_reps" ? (
                 <button type="button" className="primary-button min-h-14" onClick={completeRepsStep}>
                   <Check aria-hidden="true" size={20} />
-                  Done
+                  {t("timer.done")}
                 </button>
               ) : null}
               {(isRunning || state.phase === "paused") ? (
@@ -248,13 +266,13 @@ function WorkoutRunner({
                   type="button"
                   className="danger-button min-h-14"
                   onClick={() => {
-                    if (window.confirm("Stop this workout? The partial session will not be saved.")) {
+                    if (window.confirm(t("timer.stopConfirm"))) {
                       stopWorkout();
                     }
                   }}
                 >
                   <Square aria-hidden="true" size={19} />
-                  Stop
+                  {t("common.stop")}
                 </button>
               ) : null}
             </div>
@@ -262,22 +280,24 @@ function WorkoutRunner({
 
           <aside className="space-y-3">
             <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-4">
-              <p className="label">Next</p>
-              <p className="mt-2 text-lg font-semibold text-slate-50">{describeStep(nextStep)}</p>
+              <p className="label">{t("timer.next")}</p>
+              <p className="mt-2 text-lg font-semibold text-slate-50">
+                {describeStep(nextStep, t("timer.noNext"))}
+              </p>
             </div>
             <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-4">
-              <p className="label">Break after this step</p>
+              <p className="label">{t("timer.breakAfter")}</p>
               <p className="mt-2 text-3xl font-black text-amber-200">
                 {currentStep ? formatSeconds(currentStep.breakSeconds) : "0s"}
               </p>
             </div>
             {canAdjustWeight ? (
               <label className="block rounded-lg border border-slate-800 bg-slate-950/60 p-4">
-                <span className="label">Actual weight kg</span>
+                <span className="label">{t("timer.actualWeight")}</span>
                 <input
                   className="field mt-2"
                   min={0}
-                  placeholder="Optional"
+                  placeholder={t("common.optional")}
                   step={0.5}
                   type="number"
                   value={currentStepWeight ?? ""}
@@ -286,9 +306,12 @@ function WorkoutRunner({
               </label>
             ) : null}
             <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-4">
-              <p className="label">Voice</p>
+              <p className="label">{t("timer.voice")}</p>
               <p className="mt-2 text-sm text-slate-300">
-                {settings.voiceEnabled ? "Enabled" : "Disabled"} · Rate {settings.voiceRate.toFixed(1)}
+                {t("timer.voiceStatus", {
+                  status: settings.voiceEnabled ? t("common.enabled") : t("common.disabled"),
+                  rate: settings.voiceRate.toFixed(1),
+                })}
               </p>
             </div>
           </aside>

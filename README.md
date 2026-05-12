@@ -10,6 +10,8 @@ The app combines:
 - Voice announcements
 - Interval timer with breaks
 - Session tracking and workout history
+- English/French interface and voice templates
+- SQLite-backed persistence
 - Docker deployment on port `8060`
 
 ## Target Platform
@@ -24,10 +26,10 @@ Recommended implementation:
 - TypeScript
 - Vite
 - Tailwind CSS
-- IndexedDB for local persistence
+- SQLite for local persistence
 - dnd-kit for drag-and-drop
 - Web Speech API for voice announcements
-- Docker + Nginx for production serving
+- Docker + Node for production serving
 
 ## Required Runtime
 
@@ -151,6 +153,8 @@ Behavior:
 
 Use the browser Web Speech API for MVP.
 
+The app supports English and French UI labels and matching voice announcement templates.
+
 Examples:
 
 ```text
@@ -160,7 +164,19 @@ Break time, 15 seconds.
 Workout complete. Great job.
 ```
 
-Voice must be optional and configurable.
+Voice must be optional and configurable. The selected browser voice, language, rate, pitch, and volume are saved in app settings.
+
+## Storage
+
+The production app stores exercises, workout plans, completed sessions, and settings in SQLite through the local Node API.
+
+The database file lives in the Docker volume mounted at:
+
+```text
+/data/workout.sqlite
+```
+
+Existing browser localStorage data is migrated into SQLite on first API-backed load.
 
 ## Docker
 
@@ -168,7 +184,8 @@ The app must include:
 
 - `Dockerfile`
 - `docker-compose.yml`
-- Nginx production serving
+- Node production server
+- SQLite volume
 - Port mapping to `8060`
 
 Expected command:

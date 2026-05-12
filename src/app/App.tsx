@@ -9,6 +9,7 @@ import { useExercises } from "../hooks/useExercises";
 import { useSessions } from "../hooks/useSessions";
 import { useSettings } from "../hooks/useSettings";
 import { useWorkoutPlans } from "../hooks/useWorkoutPlans";
+import { I18nProvider, translate } from "../i18n/I18nContext";
 import type { WorkoutSession } from "../models/session";
 import type { WorkoutPlan } from "../models/workout";
 
@@ -21,6 +22,8 @@ export default function App() {
   const { settings, isLoading: settingsLoading, updateSettings } = useSettings();
 
   const isLoading = exercisesLoading || plansLoading || sessionsLoading || settingsLoading;
+  const t = (key: Parameters<typeof translate>[1], values?: Parameters<typeof translate>[2]) =>
+    translate(settings.language, key, values);
 
   const activePlanFromStore = useMemo(() => {
     if (!activePlan) {
@@ -39,48 +42,62 @@ export default function App() {
     await addSession(session);
   };
 
+  const toggleLanguage = () => {
+    void updateSettings({
+      ...settings,
+      language: settings.language === "fr" ? "en" : "fr",
+    });
+  };
+
   return (
-    <div className="min-h-screen">
-      <Navigation currentPage={currentPage} onNavigate={setCurrentPage} />
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        {isLoading ? (
-          <div className="panel p-6 text-slate-300">Loading workout data...</div>
-        ) : (
-          <>
-            {currentPage === "exercises" && (
-              <ExerciseLibrary
-                exercises={exercises}
-                onDeleteExercise={deleteExercise}
-                onSaveExercise={saveExercise}
-              />
-            )}
-            {currentPage === "builder" && (
-              <WorkoutBuilder
-                exercises={exercises}
-                plans={plans}
-                onDeletePlan={deletePlan}
-                onSavePlan={savePlan}
-                onStartPlan={handleStartPlan}
-              />
-            )}
-            {currentPage === "timer" && (
-              <ActiveWorkout
-                plan={activePlanFromStore}
-                plans={plans}
-                settings={settings}
-                onSelectPlan={setActivePlan}
-                onSessionComplete={handleSessionComplete}
-              />
-            )}
-            {currentPage === "history" && (
-              <WorkoutHistory sessions={sessions} onDeleteSession={deleteSession} />
-            )}
-            {currentPage === "settings" && (
-              <SettingsPage settings={settings} onSaveSettings={updateSettings} />
-            )}
-          </>
-        )}
-      </main>
-    </div>
+    <I18nProvider language={settings.language}>
+      <div className="min-h-screen">
+        <Navigation
+          currentPage={currentPage}
+          language={settings.language}
+          onLanguageToggle={toggleLanguage}
+          onNavigate={setCurrentPage}
+        />
+        <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+          {isLoading ? (
+            <div className="panel p-6 text-slate-300">{t("app.loading")}</div>
+          ) : (
+            <>
+              {currentPage === "exercises" && (
+                <ExerciseLibrary
+                  exercises={exercises}
+                  onDeleteExercise={deleteExercise}
+                  onSaveExercise={saveExercise}
+                />
+              )}
+              {currentPage === "builder" && (
+                <WorkoutBuilder
+                  exercises={exercises}
+                  plans={plans}
+                  onDeletePlan={deletePlan}
+                  onSavePlan={savePlan}
+                  onStartPlan={handleStartPlan}
+                />
+              )}
+              {currentPage === "timer" && (
+                <ActiveWorkout
+                  plan={activePlanFromStore}
+                  plans={plans}
+                  settings={settings}
+                  onSelectPlan={setActivePlan}
+                  onSessionComplete={handleSessionComplete}
+                />
+              )}
+              {currentPage === "history" && (
+                <WorkoutHistory sessions={sessions} onDeleteSession={deleteSession} />
+              )}
+              {currentPage === "settings" && (
+                <SettingsPage settings={settings} onSaveSettings={updateSettings} />
+              )}
+            </>
+          )}
+        </main>
+      </div>
+    </I18nProvider>
   );
 }

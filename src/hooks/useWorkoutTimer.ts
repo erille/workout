@@ -170,9 +170,9 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
       remainingSeconds: 0,
       completedAt,
     });
-    announce(getCompleteAnnouncement());
+    announce(getCompleteAnnouncement(settings.language));
     void onComplete(session);
-  }, [announce, onComplete, plan]);
+  }, [announce, onComplete, plan, settings.language]);
 
   const beginStep = useCallback(
     (round: number, stepIndex: number, startedAt?: string) => {
@@ -183,7 +183,7 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
         return;
       }
 
-      announce(getStepAnnouncement(step));
+      announce(getStepAnnouncement(step, settings.language));
 
       if (step.type === "time") {
         targetEndTimeRef.current = Date.now() + step.durationSeconds * 1000;
@@ -214,7 +214,7 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
         completedAt: undefined,
       }));
     },
-    [announce, completeWorkout, plan],
+    [announce, completeWorkout, plan, settings.language],
   );
 
   const advanceAfterBreak = useCallback(
@@ -250,7 +250,7 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
         return;
       }
 
-      announce(getBreakAnnouncement(step.breakSeconds));
+      announce(getBreakAnnouncement(step.breakSeconds, settings.language));
       targetEndTimeRef.current = Date.now() + step.breakSeconds * 1000;
       setState((previousState) => ({
         ...previousState,
@@ -261,7 +261,7 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
         remainingSeconds: step.breakSeconds,
       }));
     },
-    [advanceAfterBreak, announce, completeWorkout, plan.steps, recordStepCompletion],
+    [advanceAfterBreak, announce, completeWorkout, plan.steps, recordStepCompletion, settings.language],
   );
 
   useEffect(() => {

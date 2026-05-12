@@ -1,5 +1,6 @@
 import { Search, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useI18n } from "../../i18n/I18nContext";
 import type { WorkoutSession, WorkoutSessionStep } from "../../models/session";
 import { formatDateTime, formatSeconds, getElapsedSeconds } from "../../utils/format";
 
@@ -8,13 +9,14 @@ type WorkoutHistoryProps = {
   onDeleteSession: (sessionId: string) => Promise<void>;
 };
 
-function stepLabel(step: WorkoutSessionStep): string {
-  const target = step.type === "time" ? `${step.durationSeconds}s` : `${step.reps} reps`;
-  const weight = typeof step.weight === "number" ? ` · ${step.weight} kg` : "";
+function stepLabel(step: WorkoutSessionStep, repsLabel: string): string {
+  const target = step.type === "time" ? `${step.durationSeconds}s` : `${step.reps} ${repsLabel}`;
+  const weight = typeof step.weight === "number" ? ` - ${step.weight} kg` : "";
   return `${target}${weight}`;
 }
 
 export function WorkoutHistory({ onDeleteSession, sessions }: WorkoutHistoryProps) {
+  const { t } = useI18n();
   const [query, setQuery] = useState("");
 
   const filteredSessions = useMemo(() => {
@@ -36,8 +38,8 @@ export function WorkoutHistory({ onDeleteSession, sessions }: WorkoutHistoryProp
     <section className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="label">History</p>
-          <h2 className="text-2xl font-bold text-slate-50">Completed sessions</h2>
+          <p className="label">{t("history.section")}</p>
+          <h2 className="text-2xl font-bold text-slate-50">{t("history.title")}</h2>
         </div>
         <label className="relative block sm:w-80">
           <Search
@@ -49,7 +51,7 @@ export function WorkoutHistory({ onDeleteSession, sessions }: WorkoutHistoryProp
             className="field pl-10"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Filter by workout or exercise"
+            placeholder={t("history.filter")}
             type="search"
           />
         </label>
@@ -57,7 +59,7 @@ export function WorkoutHistory({ onDeleteSession, sessions }: WorkoutHistoryProp
 
       {filteredSessions.length === 0 ? (
         <div className="panel p-6 text-slate-300">
-          {sessions.length === 0 ? "No completed workouts yet." : "No sessions match that filter."}
+          {sessions.length === 0 ? t("history.noCompleted") : t("history.noMatches")}
         </div>
       ) : (
         <div className="space-y-4">
@@ -68,22 +70,25 @@ export function WorkoutHistory({ onDeleteSession, sessions }: WorkoutHistoryProp
                   <p className="label">{formatDateTime(session.startedAt)}</p>
                   <h3 className="text-xl font-bold text-slate-50">{session.workoutName}</h3>
                   <p className="text-sm text-slate-400">
-                    {session.roundsCompleted} round{session.roundsCompleted === 1 ? "" : "s"} ·{" "}
-                    {session.steps.length} completed steps ·{" "}
-                    {formatSeconds(getElapsedSeconds(session.startedAt, session.completedAt))}
+                    {t("history.completedSteps", {
+                      rounds: session.roundsCompleted,
+                      roundPlural: session.roundsCompleted === 1 ? "" : "s",
+                      steps: session.steps.length,
+                      duration: formatSeconds(getElapsedSeconds(session.startedAt, session.completedAt)),
+                    })}
                   </p>
                 </div>
                 <button
                   type="button"
                   className="danger-button w-fit"
                   onClick={() => {
-                    if (window.confirm(`Delete ${session.workoutName} from history?`)) {
+                    if (window.confirm(t("history.deleteConfirm", { name: session.workoutName }))) {
                       void onDeleteSession(session.id);
                     }
                   }}
                 >
                   <Trash2 aria-hidden="true" size={17} />
-                  Delete
+                  {t("common.delete")}
                 </button>
               </div>
 
@@ -94,10 +99,10 @@ export function WorkoutHistory({ onDeleteSession, sessions }: WorkoutHistoryProp
                     className="rounded-md border border-slate-800 bg-slate-950/70 p-3"
                   >
                     <p className="text-xs font-semibold uppercase text-cyan-200">
-                      Round {step.round}
+                      {t("common.round")} {step.round}
                     </p>
                     <p className="font-semibold text-slate-50">{step.exerciseName}</p>
-                    <p className="text-sm text-slate-400">{stepLabel(step)}</p>
+                    <p className="text-sm text-slate-400">{stepLabel(step, t("common.reps"))}</p>
                   </div>
                 ))}
               </div>

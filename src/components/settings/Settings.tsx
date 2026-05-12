@@ -1,5 +1,7 @@
 import { Save, Volume2, VolumeX } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
+import { useI18n } from "../../i18n/I18nContext";
+import type { Language } from "../../i18n/translations";
 import type { AppSettings } from "../../models/settings";
 import {
   getSpeechVoices,
@@ -17,14 +19,18 @@ function numberValue(value: number): string {
   return value.toFixed(1);
 }
 
-function voiceLabel(voice: SpeechVoiceOption): string {
-  const source = voice.localService ? "local" : "remote";
-  const defaultLabel = voice.default ? ", default" : "";
+function voiceLabel(
+  voice: SpeechVoiceOption,
+  labels: { defaultLabel: string; local: string; remote: string },
+): string {
+  const source = voice.localService ? labels.local : labels.remote;
+  const defaultLabel = voice.default ? `, ${labels.defaultLabel}` : "";
 
   return `${voice.name} (${voice.lang}, ${source}${defaultLabel})`;
 }
 
 export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
+  const { t } = useI18n();
   const [draft, setDraft] = useState<AppSettings>(settings);
   const [message, setMessage] = useState<string | null>(null);
   const [voices, setVoices] = useState<SpeechVoiceOption[]>([]);
@@ -55,7 +61,7 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     await onSaveSettings(draft);
-    setMessage("Settings saved.");
+    setMessage(t("settings.saved"));
   };
 
   const updateDraft = (partial: Partial<AppSettings>) => {
@@ -66,8 +72,8 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
   return (
     <section className="mx-auto max-w-3xl space-y-5">
       <div>
-        <p className="label">Settings</p>
-        <h2 className="text-2xl font-bold text-slate-50">Voice announcements</h2>
+        <p className="label">{t("settings.section")}</p>
+        <h2 className="text-2xl font-bold text-slate-50">{t("settings.title")}</h2>
       </div>
 
       <form className="panel space-y-5 p-4 sm:p-6" onSubmit={handleSubmit}>
@@ -81,15 +87,15 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
               )}
             </div>
             <div>
-              <h3 className="font-bold text-slate-50">Trainer voice</h3>
+              <h3 className="font-bold text-slate-50">{t("settings.trainerVoice")}</h3>
               <p className="text-sm text-slate-400">
-                {speechSupported ? "Browser speech is available." : "Browser speech is unavailable."}
+                {speechSupported ? t("settings.speechAvailable") : t("settings.speechUnavailable")}
               </p>
             </div>
           </div>
           <label className="inline-flex cursor-pointer items-center gap-3">
             <span className="text-sm font-semibold text-slate-300">
-              {draft.voiceEnabled ? "On" : "Off"}
+              {draft.voiceEnabled ? t("settings.on") : t("settings.off")}
             </span>
             <input
               className="h-5 w-5 accent-cyan-300"
@@ -101,7 +107,19 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
         </div>
 
         <label className="block space-y-2">
-          <span className="label">Voice</span>
+          <span className="label">{t("settings.language")}</span>
+          <select
+            className="field"
+            value={draft.language}
+            onChange={(event) => updateDraft({ language: event.target.value as Language })}
+          >
+            <option value="en">{t("settings.languageEnglish")}</option>
+            <option value="fr">{t("settings.languageFrench")}</option>
+          </select>
+        </label>
+
+        <label className="block space-y-2">
+          <span className="label">{t("settings.voice")}</span>
           <select
             className="field"
             disabled={!speechSupported || voices.length === 0}
@@ -112,23 +130,30 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
               })
             }
           >
-            <option value="">System default</option>
+            <option value="">{t("settings.systemDefault")}</option>
             {voices.map((voice) => (
               <option key={voice.voiceURI} value={voice.voiceURI}>
-                {voiceLabel(voice)}
+                {voiceLabel(voice, {
+                  defaultLabel: t("common.default"),
+                  local: t("common.local"),
+                  remote: t("common.remote"),
+                })}
               </option>
             ))}
           </select>
           <p className="text-sm text-slate-400">
             {voices.length > 0
-              ? `${voices.length} browser voice${voices.length === 1 ? "" : "s"} available.`
-              : "No selectable browser voices loaded yet."}
+              ? t("settings.voicesAvailable", {
+                  count: voices.length,
+                  plural: voices.length === 1 ? "" : "s",
+                })
+              : t("settings.noVoices")}
           </p>
         </label>
 
         <div className="grid gap-5 sm:grid-cols-3">
           <label className="space-y-3">
-            <span className="label">Rate · {numberValue(draft.voiceRate)}</span>
+            <span className="label">{t("settings.rate", { value: numberValue(draft.voiceRate) })}</span>
             <input
               className="w-full accent-cyan-300"
               min={0.5}
@@ -140,7 +165,7 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
             />
           </label>
           <label className="space-y-3">
-            <span className="label">Pitch · {numberValue(draft.voicePitch)}</span>
+            <span className="label">{t("settings.pitch", { value: numberValue(draft.voicePitch) })}</span>
             <input
               className="w-full accent-cyan-300"
               min={0}
@@ -152,7 +177,7 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
             />
           </label>
           <label className="space-y-3">
-            <span className="label">Volume · {numberValue(draft.voiceVolume)}</span>
+            <span className="label">{t("settings.volume", { value: numberValue(draft.voiceVolume) })}</span>
             <input
               className="w-full accent-cyan-300"
               min={0}
@@ -166,7 +191,7 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
         </div>
 
         <label className="block space-y-2">
-          <span className="label">Theme</span>
+          <span className="label">{t("settings.theme")}</span>
           <select
             className="field"
             value={draft.theme}
@@ -174,8 +199,8 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
               updateDraft({ theme: event.target.value as AppSettings["theme"] })
             }
           >
-            <option value="dark">Dark</option>
-            <option value="light">Light</option>
+            <option value="dark">{t("settings.dark")}</option>
+            <option value="light">{t("settings.light")}</option>
           </select>
         </label>
 
@@ -188,14 +213,14 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
         <div className="flex flex-col gap-2 sm:flex-row">
           <button type="submit" className="primary-button">
             <Save aria-hidden="true" size={17} />
-            Save settings
+            {t("settings.save")}
           </button>
           <button
             type="button"
             className="secondary-button"
             disabled={!speechSupported || !draft.voiceEnabled}
             onClick={() =>
-              speak("Next, Push-up for 45 seconds.", {
+              speak(t("settings.previewText"), {
                 voiceURI: draft.voiceURI,
                 rate: draft.voiceRate,
                 pitch: draft.voicePitch,
@@ -204,7 +229,7 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
             }
           >
             <Volume2 aria-hidden="true" size={17} />
-            Preview voice
+            {t("settings.previewVoice")}
           </button>
         </div>
       </form>

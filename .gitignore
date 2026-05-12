@@ -1,9 +1,11 @@
 node_modules
 dist
+data
 .env
 .env.local
 .DS_Store
 npm-debug.log*
+server-test*.log
 *.tsbuildinfo
 vite-*.log
 node-preview*.log

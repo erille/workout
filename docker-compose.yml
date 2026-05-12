@@ -6,4 +6,9 @@ services:
     container_name: workout
     restart: unless-stopped
     ports:
-      - "8060:80"
+      - "8060:8060"
+    volumes:
+      - workout-data:/data
+
+volumes:
+  workout-data:

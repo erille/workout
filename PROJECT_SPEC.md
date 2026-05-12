@@ -150,15 +150,9 @@ Required features:
 
 ## Storage
 
-Use local browser storage for MVP.
+Use SQLite through the local Node API for persisted app data.
 
-Preferred:
-
-- IndexedDB
-
-Acceptable for first implementation:
-
-- localStorage with clean abstraction so it can later be replaced
+The browser storage layer may keep a local fallback and should migrate existing localStorage data into SQLite on first API-backed load.
 
 Required stored entities:
 
@@ -174,6 +168,7 @@ Use Web Speech API for MVP.
 Required settings:
 
 - Enable/disable voice
+- Select app language: English or French
 - Select browser voice
 - Voice rate
 - Voice pitch
@@ -247,7 +242,6 @@ Required files:
 
 - Dockerfile
 - docker-compose.yml
-- nginx.conf if using Nginx
 - .dockerignore
 
 ## Quality Requirements

@@ -17,6 +17,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Plus, Play, Save, Trash2 } from "lucide-react";
 import { FormEvent, useMemo, useState } from "react";
+import { useI18n } from "../../i18n/I18nContext";
 import type { Exercise } from "../../models/exercise";
 import type { WorkoutPlan, WorkoutStep } from "../../models/workout";
 import { createId } from "../../utils/id";
@@ -84,8 +85,8 @@ function createStepFromExercise(exercise: Exercise, defaults: StepDefaults): Wor
   };
 }
 
-function getStepTarget(step: WorkoutStep): string {
-  const target = step.type === "time" ? `${step.durationSeconds}s` : `${step.reps} reps`;
+function getStepTarget(step: WorkoutStep, repsLabel: string): string {
+  const target = step.type === "time" ? `${step.durationSeconds}s` : `${step.reps} ${repsLabel}`;
   const weight = typeof step.weight === "number" ? ` - ${step.weight} kg` : "";
 
   return `${target}${weight}`;
@@ -114,6 +115,7 @@ function SortableStep({
   onRemove,
   onUpdate,
 }: SortableStepProps) {
+  const { t } = useI18n();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: step.id,
   });
@@ -141,14 +143,16 @@ function SortableStep({
         </button>
 
         <div>
-          <p className="text-sm font-semibold text-cyan-200">Step {index + 1}</p>
+          <p className="text-sm font-semibold text-cyan-200">
+            {t("builder.step", { number: index + 1 })}
+          </p>
           <h3 className="break-words text-lg font-bold text-slate-50">{step.exerciseName}</h3>
-          <p className="text-sm text-slate-400">{getStepTarget(step)}</p>
+          <p className="text-sm text-slate-400">{getStepTarget(step, t("common.reps"))}</p>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <label className="space-y-2">
-            <span className="label">Type</span>
+            <span className="label">{t("builder.type")}</span>
             <select
               className="field"
               value={step.type}
@@ -156,14 +160,14 @@ function SortableStep({
                 onChangeType(step.id, event.target.value as WorkoutStep["type"])
               }
             >
-              <option value="time">Time</option>
-              <option value="reps">Reps</option>
+              <option value="time">{t("common.time")}</option>
+              <option value="reps">{t("common.reps")}</option>
             </select>
           </label>
 
           {step.type === "time" ? (
             <label className="space-y-2">
-              <span className="label">Duration</span>
+              <span className="label">{t("builder.duration")}</span>
               <input
                 className="field"
                 min={1}
@@ -183,7 +187,7 @@ function SortableStep({
             </label>
           ) : (
             <label className="space-y-2">
-              <span className="label">Reps</span>
+              <span className="label">{t("common.reps")}</span>
               <input
                 className="field"
                 min={1}
@@ -204,7 +208,7 @@ function SortableStep({
           )}
 
           <label className="space-y-2">
-            <span className="label">Break</span>
+            <span className="label">{t("builder.break")}</span>
             <input
               className="field"
               min={0}
@@ -220,12 +224,12 @@ function SortableStep({
           </label>
 
           <label className="space-y-2">
-            <span className="label">Weight kg</span>
+            <span className="label">{t("builder.weightKg")}</span>
             <input
               className="field"
               min={0}
               step={0.5}
-              placeholder="Optional"
+              placeholder={t("common.optional")}
               type="number"
               value={step.weight ?? ""}
               onChange={(event) => {
@@ -249,9 +253,12 @@ function SortableStep({
       </div>
 
       <div className="mt-3 text-xs text-slate-500">
-        Defaults while adding: {defaults.durationSeconds}s - {defaults.reps} reps -{" "}
-        {defaults.breakSeconds}s break
-        {typeof defaults.weight === "number" ? ` - ${defaults.weight} kg` : ""}
+        {t("builder.defaults", {
+          duration: defaults.durationSeconds,
+          reps: defaults.reps,
+          breakSeconds: defaults.breakSeconds,
+          weight: typeof defaults.weight === "number" ? ` - ${defaults.weight} kg` : "",
+        })}
       </div>
     </article>
   );
@@ -264,7 +271,11 @@ export function WorkoutBuilder({
   onStartPlan,
   plans,
 }: WorkoutBuilderProps) {
-  const [draft, setDraft] = useState<DraftPlan>(emptyDraft);
+  const { t } = useI18n();
+  const [draft, setDraft] = useState<DraftPlan>({
+    ...emptyDraft,
+    name: t("builder.defaultName"),
+  });
   const [defaults, setDefaults] = useState<StepDefaults>({
     durationSeconds: 45,
     reps: 12,
@@ -306,7 +317,7 @@ export function WorkoutBuilder({
     }
 
     updateDraftSteps((steps) => [...steps, createStepFromExercise(selectedExercise, defaults)]);
-    setMessage(`${selectedExercise.name} added.`);
+    setMessage(t("builder.added", { name: selectedExercise.name }));
   };
 
   const updateStep = (stepId: string, update: (step: WorkoutStep) => WorkoutStep) => {
@@ -366,12 +377,12 @@ export function WorkoutBuilder({
     const name = draft.name.trim();
 
     if (!name) {
-      setError("Workout name is required.");
+      setError(t("builder.errorName"));
       return null;
     }
 
     if (draft.steps.length === 0) {
-      setError("Add at least one exercise before saving.");
+      setError(t("builder.errorSteps"));
       return null;
     }
 
@@ -384,7 +395,7 @@ export function WorkoutBuilder({
     });
 
     if (invalidStep) {
-      setError("Step duration, reps, break, and weight values must be valid.");
+      setError(t("builder.errorValues"));
       return null;
     }
 
@@ -413,7 +424,7 @@ export function WorkoutBuilder({
 
     await onSavePlan(plan);
     setDraft(clonePlanToDraft(plan));
-    setMessage("Workout plan saved.");
+    setMessage(t("builder.saved"));
     return plan;
   };
 
@@ -431,14 +442,14 @@ export function WorkoutBuilder({
         <div className="panel p-4">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="label">Plans</p>
-              <h2 className="text-xl font-bold text-slate-50">Saved workouts</h2>
+              <p className="label">{t("builder.plans")}</p>
+              <h2 className="text-xl font-bold text-slate-50">{t("builder.savedWorkouts")}</h2>
             </div>
             <button
               type="button"
               className="secondary-button px-3"
               onClick={() => {
-                setDraft({ ...emptyDraft, steps: [] });
+                setDraft({ ...emptyDraft, name: t("builder.defaultName"), steps: [] });
                 setError(null);
                 setMessage(null);
               }}
@@ -450,7 +461,7 @@ export function WorkoutBuilder({
           <div className="mt-4 space-y-2">
             {plans.length === 0 ? (
               <p className="rounded-md border border-dashed border-slate-700 p-3 text-sm text-slate-400">
-                No saved plans yet.
+                {t("builder.noSavedPlans")}
               </p>
             ) : (
               plans.map((plan) => (
@@ -462,7 +473,9 @@ export function WorkoutBuilder({
                     <div>
                       <h3 className="font-semibold text-slate-50">{plan.name}</h3>
                       <p className="text-xs text-slate-400">
-                        {plan.steps.length} steps · {plan.rounds} round
+                        {plan.steps.length}{" "}
+                        {plan.steps.length === 1 ? t("common.step") : t("common.steps")} -{" "}
+                        {plan.rounds} {t("common.round").toLowerCase()}
                         {plan.rounds === 1 ? "" : "s"}
                       </p>
                     </div>
@@ -471,7 +484,7 @@ export function WorkoutBuilder({
                       className="danger-button px-2 py-2"
                       aria-label={`Delete ${plan.name}`}
                       onClick={() => {
-                        if (window.confirm(`Delete ${plan.name}?`)) {
+                        if (window.confirm(t("builder.deletePlan", { name: plan.name }))) {
                           void onDeletePlan(plan.id);
                         }
                       }}
@@ -489,7 +502,7 @@ export function WorkoutBuilder({
                         setMessage(null);
                       }}
                     >
-                      Edit
+                      {t("common.edit")}
                     </button>
                     <button
                       type="button"
@@ -497,7 +510,7 @@ export function WorkoutBuilder({
                       onClick={() => onStartPlan(plan)}
                     >
                       <Play aria-hidden="true" size={16} />
-                      Start
+                      {t("common.start")}
                     </button>
                   </div>
                 </div>
@@ -511,7 +524,7 @@ export function WorkoutBuilder({
         <div className="panel p-4">
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_8rem]">
             <label className="space-y-2">
-              <span className="label">Workout name</span>
+              <span className="label">{t("builder.workoutName")}</span>
               <input
                 className="field text-base"
                 value={draft.name}
@@ -521,7 +534,7 @@ export function WorkoutBuilder({
               />
             </label>
             <label className="space-y-2">
-              <span className="label">Rounds</span>
+              <span className="label">{t("common.rounds")}</span>
               <input
                 className="field text-base"
                 min={1}
@@ -539,7 +552,7 @@ export function WorkoutBuilder({
 
           <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_8rem_8rem_8rem_9rem_auto] lg:items-end">
             <label className="space-y-2">
-              <span className="label">Exercise</span>
+              <span className="label">{t("builder.exercise")}</span>
               <select
                 className="field"
                 value={selectedExerciseId}
@@ -553,7 +566,7 @@ export function WorkoutBuilder({
               </select>
             </label>
             <label className="space-y-2">
-              <span className="label">Time</span>
+              <span className="label">{t("common.time")}</span>
               <input
                 className="field"
                 min={1}
@@ -568,7 +581,7 @@ export function WorkoutBuilder({
               />
             </label>
             <label className="space-y-2">
-              <span className="label">Reps</span>
+              <span className="label">{t("common.reps")}</span>
               <input
                 className="field"
                 min={1}
@@ -583,7 +596,7 @@ export function WorkoutBuilder({
               />
             </label>
             <label className="space-y-2">
-              <span className="label">Break</span>
+              <span className="label">{t("builder.break")}</span>
               <input
                 className="field"
                 min={0}
@@ -598,12 +611,12 @@ export function WorkoutBuilder({
               />
             </label>
             <label className="space-y-2">
-              <span className="label">Weight kg</span>
+              <span className="label">{t("builder.weightKg")}</span>
               <input
                 className="field"
                 min={0}
                 step={0.5}
-                placeholder="Optional"
+                placeholder={t("common.optional")}
                 type="number"
                 value={defaults.weight ?? ""}
                 onChange={(event) =>
@@ -616,17 +629,17 @@ export function WorkoutBuilder({
             </label>
             <button type="button" className="primary-button h-11" onClick={addSelectedExercise}>
               <Plus aria-hidden="true" size={17} />
-              Add
+              {t("common.add")}
             </button>
           </div>
 
           <label className="mt-4 block space-y-2">
-            <span className="label">Filter exercise picker</span>
+            <span className="label">{t("builder.filter")}</span>
             <input
               className="field"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Type to filter exercise names"
+              placeholder={t("builder.filterPlaceholder")}
             />
           </label>
 
@@ -652,17 +665,19 @@ export function WorkoutBuilder({
         <div className="space-y-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <p className="label">Workout Steps</p>
-              <h2 className="text-2xl font-bold text-slate-50">{draft.steps.length} configured</h2>
+              <p className="label">{t("builder.steps")}</p>
+              <h2 className="text-2xl font-bold text-slate-50">
+                {t("builder.configured", { count: draft.steps.length })}
+              </h2>
             </div>
             <div className="flex flex-wrap gap-2">
               <button type="submit" className="secondary-button">
                 <Save aria-hidden="true" size={17} />
-                Save plan
+                {t("builder.savePlan")}
               </button>
               <button type="button" className="primary-button" onClick={handleStart}>
                 <Play aria-hidden="true" size={17} />
-                Save and start
+                {t("builder.saveAndStart")}
               </button>
             </div>
           </div>
@@ -680,7 +695,7 @@ export function WorkoutBuilder({
 
           {draft.steps.length === 0 ? (
             <div className="panel border-dashed p-6 text-center text-slate-400">
-              Add exercises to create the workout sequence.
+              {t("builder.emptySteps")}
             </div>
           ) : (
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>

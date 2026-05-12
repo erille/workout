@@ -1,42 +1,66 @@
 import {
   Dumbbell,
+  Globe2,
   History,
   Library,
   ListChecks,
   Settings,
   Timer,
 } from "lucide-react";
+import type { Language } from "../../i18n/translations";
+import type { TranslationKey } from "../../i18n/translations";
+import { useI18n } from "../../i18n/I18nContext";
 
 export type PageId = "exercises" | "builder" | "timer" | "history" | "settings";
 
 type NavigationProps = {
   currentPage: PageId;
+  language: Language;
+  onLanguageToggle: () => void;
   onNavigate: (page: PageId) => void;
 };
 
 const navItems = [
-  { id: "exercises", label: "Exercises", icon: Library },
-  { id: "builder", label: "Builder", icon: ListChecks },
-  { id: "timer", label: "Timer", icon: Timer },
-  { id: "history", label: "History", icon: History },
-  { id: "settings", label: "Settings", icon: Settings },
-] satisfies Array<{ id: PageId; label: string; icon: typeof Dumbbell }>;
+  { id: "exercises", labelKey: "nav.exercises", icon: Library },
+  { id: "builder", labelKey: "nav.builder", icon: ListChecks },
+  { id: "timer", labelKey: "nav.timer", icon: Timer },
+  { id: "history", labelKey: "nav.history", icon: History },
+  { id: "settings", labelKey: "nav.settings", icon: Settings },
+] satisfies Array<{ id: PageId; labelKey: TranslationKey; icon: typeof Dumbbell }>;
 
-export function Navigation({ currentPage, onNavigate }: NavigationProps) {
+export function Navigation({
+  currentPage,
+  language,
+  onLanguageToggle,
+  onNavigate,
+}: NavigationProps) {
+  const { t } = useI18n();
+
   return (
     <header className="sticky top-0 z-20 border-b border-slate-800/90 bg-slate-950/88 backdrop-blur">
       <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-4 sm:px-6 lg:px-8">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-md bg-cyan-400 text-slate-950">
-            <Dumbbell aria-hidden="true" size={22} />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-md bg-cyan-400 text-slate-950">
+              <Dumbbell aria-hidden="true" size={22} />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-slate-50">Workout</h1>
+              <p className="text-sm text-slate-400">{t("nav.subtitle")}</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-slate-50">Workout</h1>
-            <p className="text-sm text-slate-400">Local training planner</p>
-          </div>
+          <button
+            type="button"
+            className="secondary-button px-3"
+            aria-label={t("nav.languageToggle")}
+            onClick={onLanguageToggle}
+          >
+            <Globe2 aria-hidden="true" size={17} />
+            {language.toUpperCase()}
+          </button>
         </div>
-        <nav className="flex gap-2 overflow-x-auto pb-1" aria-label="Main navigation">
-          {navItems.map(({ id, label, icon: Icon }) => {
+        <nav className="flex gap-2 overflow-x-auto pb-1" aria-label={t("nav.aria")}>
+          {navItems.map(({ id, labelKey, icon: Icon }) => {
             const isActive = currentPage === id;
 
             return (
@@ -51,7 +75,7 @@ export function Navigation({ currentPage, onNavigate }: NavigationProps) {
                 onClick={() => onNavigate(id)}
               >
                 <Icon aria-hidden="true" size={18} />
-                {label}
+                {t(labelKey)}
               </button>
             );
           })}

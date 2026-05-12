@@ -1,8 +1,8 @@
 import { Edit3, Plus, Save, Search, Trash2, X } from "lucide-react";
 import { FormEvent, useMemo, useState } from "react";
+import { useI18n } from "../../i18n/I18nContext";
 import {
   exerciseCategories,
-  exerciseCategoryLabels,
   type Exercise,
   type ExerciseCategory,
   type ExerciseMode,
@@ -53,6 +53,7 @@ export function ExerciseLibrary({
   onDeleteExercise,
   onSaveExercise,
 }: ExerciseLibraryProps) {
+  const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [form, setForm] = useState<ExerciseFormState>(emptyForm);
   const [error, setError] = useState<string | null>(null);
@@ -86,7 +87,7 @@ export function ExerciseLibrary({
     const trimmedName = form.name.trim();
 
     if (!trimmedName) {
-      setError("Exercise name is required.");
+      setError(t("exercises.errorNameRequired"));
       return;
     }
 
@@ -96,17 +97,17 @@ export function ExerciseLibrary({
     );
 
     if (duplicate) {
-      setError("Exercise names must be unique.");
+      setError(t("exercises.errorUnique"));
       return;
     }
 
     if (form.defaultMode === "time" && form.defaultDurationSeconds <= 0) {
-      setError("Default duration must be greater than 0.");
+      setError(t("exercises.errorDuration"));
       return;
     }
 
     if (form.defaultMode === "reps" && form.defaultReps <= 0) {
-      setError("Default reps must be greater than 0.");
+      setError(t("exercises.errorReps"));
       return;
     }
 
@@ -137,8 +138,8 @@ export function ExerciseLibrary({
       <div className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="label">Exercise Library</p>
-            <h2 className="text-2xl font-bold text-slate-50">Reusable exercises</h2>
+            <p className="label">{t("exercises.section")}</p>
+            <h2 className="text-2xl font-bold text-slate-50">{t("exercises.title")}</h2>
           </div>
           <label className="relative block sm:w-80">
             <Search
@@ -150,7 +151,7 @@ export function ExerciseLibrary({
               className="field pl-10"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search exercises"
+              placeholder={t("exercises.search")}
               type="search"
             />
           </label>
@@ -163,20 +164,21 @@ export function ExerciseLibrary({
                 <div>
                   <h3 className="text-lg font-semibold text-slate-50">{exercise.name}</h3>
                   <p className="text-sm text-slate-400">
-                    {exerciseCategoryLabels[exercise.category]} · {exercise.defaultMode}
+                    {t(`category.${exercise.category}`)} -{" "}
+                    {exercise.defaultMode === "time" ? t("common.time") : t("common.reps")}
                   </p>
                 </div>
                 <span className="rounded-md border border-slate-700 px-2 py-1 text-xs font-semibold text-slate-300">
                   {exercise.defaultMode === "time"
                     ? `${exercise.defaultDurationSeconds ?? 0}s`
-                    : `${exercise.defaultReps ?? 0} reps`}
+                    : `${exercise.defaultReps ?? 0} ${t("common.reps")}`}
                 </span>
               </div>
 
               {exercise.notes ? (
                 <p className="min-h-10 text-sm leading-6 text-slate-300">{exercise.notes}</p>
               ) : (
-                <p className="min-h-10 text-sm leading-6 text-slate-500">No notes</p>
+                <p className="min-h-10 text-sm leading-6 text-slate-500">{t("exercises.noNotes")}</p>
               )}
 
               <div className="mt-auto flex gap-2">
@@ -189,14 +191,14 @@ export function ExerciseLibrary({
                   }}
                 >
                   <Edit3 aria-hidden="true" size={16} />
-                  Edit
+                  {t("common.edit")}
                 </button>
                 <button
                   type="button"
                   className="danger-button"
-                  aria-label={`Delete ${exercise.name}`}
+                  aria-label={t("exercises.deleteConfirm", { name: exercise.name })}
                   onClick={() => {
-                    if (window.confirm(`Delete ${exercise.name}?`)) {
+                    if (window.confirm(t("exercises.deleteConfirm", { name: exercise.name }))) {
                       void onDeleteExercise(exercise.id);
                     }
                   }}
@@ -213,9 +215,9 @@ export function ExerciseLibrary({
         <form className="space-y-4" onSubmit={handleSubmit}>
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="label">{form.id ? "Edit Exercise" : "Add Exercise"}</p>
+              <p className="label">{form.id ? t("exercises.formEdit") : t("exercises.formAdd")}</p>
               <h2 className="text-xl font-bold text-slate-50">
-                {form.id ? form.name || "Exercise" : "New exercise"}
+                {form.id ? form.name || t("common.exercise") : t("exercises.newExercise")}
               </h2>
             </div>
             {form.id ? (
@@ -226,17 +228,17 @@ export function ExerciseLibrary({
           </div>
 
           <label className="block space-y-2">
-            <span className="label">Name</span>
+            <span className="label">{t("exercises.name")}</span>
             <input
               className="field"
               value={form.name}
               onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
-              placeholder="Exercise name"
+              placeholder={t("exercises.namePlaceholder")}
             />
           </label>
 
           <label className="block space-y-2">
-            <span className="label">Category</span>
+            <span className="label">{t("exercises.category")}</span>
             <select
               className="field"
               value={form.category}
@@ -249,14 +251,14 @@ export function ExerciseLibrary({
             >
               {exerciseCategories.map((category) => (
                 <option key={category} value={category}>
-                  {exerciseCategoryLabels[category]}
+                  {t(`category.${category}`)}
                 </option>
               ))}
             </select>
           </label>
 
           <fieldset className="space-y-2">
-            <legend className="label">Default mode</legend>
+            <legend className="label">{t("exercises.defaultMode")}</legend>
             <div className="grid grid-cols-2 gap-2">
               {(["reps", "time"] as const).map((mode) => (
                 <button
@@ -269,7 +271,7 @@ export function ExerciseLibrary({
                   }`}
                   onClick={() => setForm((current) => ({ ...current, defaultMode: mode }))}
                 >
-                  {mode === "time" ? "Time" : "Reps"}
+                  {mode === "time" ? t("common.time") : t("common.reps")}
                 </button>
               ))}
             </div>
@@ -277,7 +279,7 @@ export function ExerciseLibrary({
 
           {form.defaultMode === "time" ? (
             <label className="block space-y-2">
-              <span className="label">Default duration</span>
+              <span className="label">{t("exercises.defaultDuration")}</span>
               <input
                 className="field"
                 min={1}
@@ -293,7 +295,7 @@ export function ExerciseLibrary({
             </label>
           ) : (
             <label className="block space-y-2">
-              <span className="label">Default reps</span>
+              <span className="label">{t("exercises.defaultReps")}</span>
               <input
                 className="field"
                 min={1}
@@ -310,12 +312,12 @@ export function ExerciseLibrary({
           )}
 
           <label className="block space-y-2">
-            <span className="label">Notes</span>
+            <span className="label">{t("exercises.notes")}</span>
             <textarea
               className="field min-h-24 resize-y"
               value={form.notes}
               onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))}
-              placeholder="Optional coaching notes"
+              placeholder={t("exercises.notesPlaceholder")}
             />
           </label>
 
@@ -327,7 +329,7 @@ export function ExerciseLibrary({
 
           <button type="submit" className="primary-button w-full" disabled={isSaving}>
             {form.id ? <Save aria-hidden="true" size={17} /> : <Plus aria-hidden="true" size={17} />}
-            {form.id ? "Save changes" : "Add exercise"}
+            {form.id ? t("exercises.saveChanges") : t("exercises.addExercise")}
           </button>
         </form>
       </aside>

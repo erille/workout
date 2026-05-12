@@ -1,53 +1,87 @@
 import type { WorkoutSession, WorkoutSessionStep } from "../models/session";
+import type { Language } from "../i18n/translations";
 import type { WorkoutPlan, WorkoutStep } from "../models/workout";
 import { createId } from "../utils/id";
 
-const timeExerciseTemplates = [
-  "Next, {exercise} for {duration} seconds.",
-  "Let's go. {exercise}, {duration} seconds.",
-  "Get ready for {exercise}, {duration} seconds.",
-];
-
-const repsExerciseTemplates = [
-  "Now let's do {exercise}, {reps} reps.",
-  "Next, {exercise}, {reps} strong reps.",
-  "Get ready for {exercise}, {reps} reps.",
-];
-
-const breakTemplates = [
-  "Break time, {break} seconds.",
-  "Recover now, {break} seconds.",
-  "Nice work. Take {break} seconds.",
-];
-
-const completeTemplates = [
-  "Workout complete. Great job.",
-  "Session finished. Well done.",
-  "Great work. Workout complete.",
-];
+const voiceTemplates: Record<
+  Language,
+  {
+    time: string[];
+    reps: string[];
+    break: string[];
+    complete: string[];
+  }
+> = {
+  en: {
+    time: [
+      "Next, {exercise} for {duration} seconds.",
+      "Let's go. {exercise}, {duration} seconds.",
+      "Get ready for {exercise}, {duration} seconds.",
+    ],
+    reps: [
+      "Now let's do {exercise}, {reps} reps.",
+      "Next, {exercise}, {reps} strong reps.",
+      "Get ready for {exercise}, {reps} reps.",
+    ],
+    break: [
+      "Break time, {break} seconds.",
+      "Recover now, {break} seconds.",
+      "Nice work. Take {break} seconds.",
+    ],
+    complete: [
+      "Workout complete. Great job.",
+      "Session finished. Well done.",
+      "Great work. Workout complete.",
+    ],
+  },
+  fr: {
+    time: [
+      "Prochain exercice, {exercise} pendant {duration} secondes.",
+      "On y va. {exercise}, {duration} secondes.",
+      "Prepare-toi pour {exercise}, {duration} secondes.",
+    ],
+    reps: [
+      "Maintenant, {exercise}, {reps} repetitions.",
+      "Prochain exercice, {exercise}, {reps} repetitions.",
+      "Prepare-toi pour {exercise}, {reps} repetitions.",
+    ],
+    break: [
+      "Pause, {break} secondes.",
+      "Recupere maintenant, {break} secondes.",
+      "Bien joue. Prends {break} secondes.",
+    ],
+    complete: [
+      "Entrainement termine. Bien joue.",
+      "Session terminee. Beau travail.",
+      "Tres bon travail. Entrainement termine.",
+    ],
+  },
+};
 
 function pickTemplate(templates: string[], seed: number): string {
   return templates[Math.abs(seed) % templates.length] ?? templates[0];
 }
 
-export function getStepAnnouncement(step: WorkoutStep): string {
+export function getStepAnnouncement(step: WorkoutStep, language: Language): string {
+  const templates = voiceTemplates[language];
+
   if (step.type === "time") {
-    return pickTemplate(timeExerciseTemplates, step.exerciseName.length + step.durationSeconds)
+    return pickTemplate(templates.time, step.exerciseName.length + step.durationSeconds)
       .replace("{exercise}", step.exerciseName)
       .replace("{duration}", String(step.durationSeconds));
   }
 
-  return pickTemplate(repsExerciseTemplates, step.exerciseName.length + step.reps)
+  return pickTemplate(templates.reps, step.exerciseName.length + step.reps)
     .replace("{exercise}", step.exerciseName)
     .replace("{reps}", String(step.reps));
 }
 
-export function getBreakAnnouncement(breakSeconds: number): string {
-  return pickTemplate(breakTemplates, breakSeconds).replace("{break}", String(breakSeconds));
+export function getBreakAnnouncement(breakSeconds: number, language: Language): string {
+  return pickTemplate(voiceTemplates[language].break, breakSeconds).replace("{break}", String(breakSeconds));
 }
 
-export function getCompleteAnnouncement(): string {
-  return pickTemplate(completeTemplates, Date.now());
+export function getCompleteAnnouncement(language: Language): string {
+  return pickTemplate(voiceTemplates[language].complete, Date.now());
 }
 
 export function getNextStep(

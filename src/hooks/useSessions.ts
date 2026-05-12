@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
-import { getSessions, saveSessions } from "../data/storage";
+import { getSessions, saveSessions, type StorageMode } from "../data/storage";
 import type { WorkoutSession } from "../models/session";
 
 function sortSessions(sessions: WorkoutSession[]): WorkoutSession[] {
   return [...sessions].sort((a, b) => b.startedAt.localeCompare(a.startedAt));
 }
 
-export function useSessions(enabled = true) {
+export function useSessions(mode: StorageMode, enabled = true) {
   const [sessions, setSessions] = useState<WorkoutSession[]>([]);
+  const [loadedMode, setLoadedMode] = useState<StorageMode | null>(null);
   const [isLoading, setIsLoading] = useState(enabled);
 
   useEffect(() => {
@@ -19,10 +20,11 @@ export function useSessions(enabled = true) {
     let isMounted = true;
     setIsLoading(true);
 
-    getSessions()
+    getSessions(mode)
       .then((loadedSessions) => {
         if (isMounted) {
           setSessions(sortSessions(loadedSessions));
+          setLoadedMode(mode);
         }
       })
       .finally(() => {
@@ -34,31 +36,34 @@ export function useSessions(enabled = true) {
     return () => {
       isMounted = false;
     };
-  }, [enabled]);
+  }, [enabled, mode]);
+
+  const visibleSessions = loadedMode === mode ? sessions : [];
 
   const persistSessions = useCallback(async (nextSessions: WorkoutSession[]) => {
     const sortedSessions = sortSessions(nextSessions);
     setSessions(sortedSessions);
-    await saveSessions(sortedSessions);
-  }, []);
+    setLoadedMode(mode);
+    await saveSessions(sortedSessions, mode);
+  }, [mode]);
 
   const addSession = useCallback(
     async (session: WorkoutSession) => {
-      await persistSessions([session, ...sessions.filter((item) => item.id !== session.id)]);
+      await persistSessions([session, ...visibleSessions.filter((item) => item.id !== session.id)]);
     },
-    [persistSessions, sessions],
+    [persistSessions, visibleSessions],
   );
 
   const deleteSession = useCallback(
     async (sessionId: string) => {
-      await persistSessions(sessions.filter((session) => session.id !== sessionId));
+      await persistSessions(visibleSessions.filter((session) => session.id !== sessionId));
     },
-    [persistSessions, sessions],
+    [persistSessions, visibleSessions],
   );
 
   return {
-    sessions,
-    isLoading,
+    sessions: visibleSessions,
+    isLoading: enabled && (isLoading || loadedMode !== mode),
     addSession,
     deleteSession,
   };

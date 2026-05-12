@@ -1,4 +1,5 @@
 export type AuthStatus = {
+  apiAvailable: boolean;
   authEnabled: boolean;
   authenticated: boolean;
 };
@@ -22,9 +23,14 @@ async function authRequest<T>(path: string, options?: RequestInit): Promise<T> {
 
 export async function getAuthStatus(): Promise<AuthStatus> {
   try {
-    return await authRequest<AuthStatus>("/api/auth/status");
+    const status = await authRequest<Omit<AuthStatus, "apiAvailable">>("/api/auth/status");
+    return {
+      ...status,
+      apiAvailable: true,
+    };
   } catch {
     return {
+      apiAvailable: false,
       authEnabled: false,
       authenticated: true,
     };
@@ -32,14 +38,22 @@ export async function getAuthStatus(): Promise<AuthStatus> {
 }
 
 export async function login(password: string): Promise<AuthStatus> {
-  return authRequest<AuthStatus>("/api/auth/login", {
+  const status = await authRequest<Omit<AuthStatus, "apiAvailable">>("/api/auth/login", {
     method: "POST",
     body: JSON.stringify({ password }),
   });
+  return {
+    ...status,
+    apiAvailable: true,
+  };
 }
 
 export async function logout(): Promise<AuthStatus> {
-  return authRequest<AuthStatus>("/api/auth/logout", {
+  const status = await authRequest<Omit<AuthStatus, "apiAvailable">>("/api/auth/logout", {
     method: "POST",
   });
+  return {
+    ...status,
+    apiAvailable: true,
+  };
 }

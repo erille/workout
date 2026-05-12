@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
-import { getExercises, saveExercises } from "../data/storage";
+import { getExercises, saveExercises, type StorageMode } from "../data/storage";
 import type { Exercise } from "../models/exercise";
 
 function sortExercises(exercises: Exercise[]): Exercise[] {
   return [...exercises].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export function useExercises(enabled = true) {
+export function useExercises(mode: StorageMode, enabled = true) {
   const [exercises, setExercises] = useState<Exercise[]>([]);
+  const [loadedMode, setLoadedMode] = useState<StorageMode | null>(null);
   const [isLoading, setIsLoading] = useState(enabled);
 
   useEffect(() => {
@@ -19,10 +20,11 @@ export function useExercises(enabled = true) {
     let isMounted = true;
     setIsLoading(true);
 
-    getExercises()
+    getExercises(mode)
       .then((loadedExercises) => {
         if (isMounted) {
           setExercises(sortExercises(loadedExercises));
+          setLoadedMode(mode);
         }
       })
       .finally(() => {
@@ -34,18 +36,21 @@ export function useExercises(enabled = true) {
     return () => {
       isMounted = false;
     };
-  }, [enabled]);
+  }, [enabled, mode]);
+
+  const visibleExercises = loadedMode === mode ? exercises : [];
 
   const persistExercises = useCallback(async (nextExercises: Exercise[]) => {
     const sortedExercises = sortExercises(nextExercises);
     setExercises(sortedExercises);
-    await saveExercises(sortedExercises);
-  }, []);
+    setLoadedMode(mode);
+    await saveExercises(sortedExercises, mode);
+  }, [mode]);
 
   const saveExercise = useCallback(
     async (exercise: Exercise) => {
       const now = new Date().toISOString();
-      const existing = exercises.find((item) => item.id === exercise.id);
+      const existing = visibleExercises.find((item) => item.id === exercise.id);
       const normalizedExercise: Exercise = {
         ...exercise,
         name: exercise.name.trim(),
@@ -55,24 +60,24 @@ export function useExercises(enabled = true) {
       };
 
       const nextExercises = existing
-        ? exercises.map((item) => (item.id === normalizedExercise.id ? normalizedExercise : item))
-        : [...exercises, normalizedExercise];
+        ? visibleExercises.map((item) => (item.id === normalizedExercise.id ? normalizedExercise : item))
+        : [...visibleExercises, normalizedExercise];
 
       await persistExercises(nextExercises);
     },
-    [exercises, persistExercises],
+    [persistExercises, visibleExercises],
   );
 
   const deleteExercise = useCallback(
     async (exerciseId: string) => {
-      await persistExercises(exercises.filter((exercise) => exercise.id !== exerciseId));
+      await persistExercises(visibleExercises.filter((exercise) => exercise.id !== exerciseId));
     },
-    [exercises, persistExercises],
+    [persistExercises, visibleExercises],
   );
 
   return {
-    exercises,
-    isLoading,
+    exercises: visibleExercises,
+    isLoading: enabled && (isLoading || loadedMode !== mode),
     saveExercise,
     deleteExercise,
   };

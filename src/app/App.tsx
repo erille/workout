@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { LoginPage } from "../components/auth/LoginPage";
 import { ExerciseLibrary } from "../components/exercises/ExerciseLibrary";
 import { WorkoutHistory } from "../components/history/WorkoutHistory";
@@ -12,31 +12,49 @@ import { useSessions } from "../hooks/useSessions";
 import { useSettings } from "../hooks/useSettings";
 import { useWorkoutPlans } from "../hooks/useWorkoutPlans";
 import { I18nProvider, translate } from "../i18n/I18nContext";
-import type { Language } from "../i18n/translations";
+import type { StorageMode } from "../data/storage";
 import type { WorkoutSession } from "../models/session";
 import type { WorkoutPlan } from "../models/workout";
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState<PageId>("exercises");
   const [activePlan, setActivePlan] = useState<WorkoutPlan | null>(null);
-  const [loginLanguage, setLoginLanguage] = useState<Language>(() =>
-    typeof navigator !== "undefined" && navigator.language.toLowerCase().startsWith("fr")
-      ? "fr"
-      : "en",
-  );
+  const [isLoginOpen, setIsLoginOpen] = useState(false);
   const { status: authStatus, isLoading: authLoading, login, logout } = useAuth();
-  const canLoadData = !authLoading && (!authStatus.authEnabled || authStatus.authenticated);
+  const storageMode: StorageMode =
+    !authStatus.apiAvailable || (authStatus.authEnabled && !authStatus.authenticated)
+      ? "local"
+      : "server";
+  const canLoadData = !authLoading;
   const { exercises, isLoading: exercisesLoading, saveExercise, deleteExercise } =
-    useExercises(canLoadData);
-  const { plans, isLoading: plansLoading, savePlan, deletePlan } = useWorkoutPlans(canLoadData);
-  const { sessions, isLoading: sessionsLoading, addSession, deleteSession } = useSessions(canLoadData);
-  const { settings, isLoading: settingsLoading, updateSettings } = useSettings(canLoadData);
+    useExercises(storageMode, canLoadData);
+  const { plans, isLoading: plansLoading, savePlan, deletePlan } = useWorkoutPlans(
+    storageMode,
+    canLoadData,
+  );
+  const { sessions, isLoading: sessionsLoading, addSession, deleteSession } = useSessions(
+    storageMode,
+    canLoadData,
+  );
+  const { settings, isLoading: settingsLoading, updateSettings } = useSettings(
+    storageMode,
+    canLoadData,
+  );
 
-  const language = canLoadData ? settings.language : loginLanguage;
-  const isLoading =
-    authLoading || (canLoadData && (exercisesLoading || plansLoading || sessionsLoading || settingsLoading));
+  const language = settings.language;
+  const isLoading = authLoading || exercisesLoading || plansLoading || sessionsLoading || settingsLoading;
   const t = (key: Parameters<typeof translate>[1], values?: Parameters<typeof translate>[2]) =>
     translate(language, key, values);
+
+  useEffect(() => {
+    setActivePlan(null);
+  }, [storageMode]);
+
+  useEffect(() => {
+    if (!authStatus.authEnabled || authStatus.authenticated) {
+      setIsLoginOpen(false);
+    }
+  }, [authStatus.authEnabled, authStatus.authenticated]);
 
   const activePlanFromStore = useMemo(() => {
     if (!activePlan) {
@@ -56,16 +74,21 @@ export default function App() {
   };
 
   const toggleLanguage = () => {
-    if (!canLoadData) {
-      setLoginLanguage((current) => (current === "fr" ? "en" : "fr"));
-      return;
-    }
-
     void updateSettings({
       ...settings,
       language: settings.language === "fr" ? "en" : "fr",
       voiceURI: undefined,
     });
+  };
+
+  const handleLogin = async (password: string) => {
+    await login(password);
+    setIsLoginOpen(false);
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    setActivePlan(null);
   };
 
   return (
@@ -75,17 +98,18 @@ export default function App() {
           <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
             <div className="panel p-6 text-slate-300">{t("app.loading")}</div>
           </main>
-        ) : authStatus.authEnabled && !authStatus.authenticated ? (
-          <LoginPage language={language} onLanguageToggle={toggleLanguage} onLogin={login} />
         ) : (
           <>
             <Navigation
               authEnabled={authStatus.authEnabled}
               currentPage={currentPage}
+              isAuthenticated={authStatus.authenticated}
               language={language}
+              storageMode={storageMode}
               onLanguageToggle={toggleLanguage}
+              onLogin={() => setIsLoginOpen(true)}
               onLogout={() => {
-                void logout();
+                void handleLogout();
               }}
               onNavigate={setCurrentPage}
             />
@@ -122,6 +146,9 @@ export default function App() {
                 <SettingsPage settings={settings} onSaveSettings={updateSettings} />
               )}
             </main>
+            {isLoginOpen ? (
+              <LoginPage onCancel={() => setIsLoginOpen(false)} onLogin={handleLogin} />
+            ) : null}
           </>
         )}
       </div>

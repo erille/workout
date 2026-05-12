@@ -4,6 +4,7 @@ import {
   History,
   Library,
   ListChecks,
+  LogIn,
   LogOut,
   Settings,
   Timer,
@@ -11,14 +12,18 @@ import {
 import type { Language } from "../../i18n/translations";
 import type { TranslationKey } from "../../i18n/translations";
 import { useI18n } from "../../i18n/I18nContext";
+import type { StorageMode } from "../../data/storage";
 
 export type PageId = "exercises" | "builder" | "timer" | "history" | "settings";
 
 type NavigationProps = {
   authEnabled: boolean;
   currentPage: PageId;
+  isAuthenticated: boolean;
   language: Language;
+  storageMode: StorageMode;
   onLanguageToggle: () => void;
+  onLogin: () => void;
   onLogout: () => void;
   onNavigate: (page: PageId) => void;
 };
@@ -34,12 +39,21 @@ const navItems = [
 export function Navigation({
   authEnabled,
   currentPage,
+  isAuthenticated,
   language,
+  storageMode,
   onLanguageToggle,
+  onLogin,
   onLogout,
   onNavigate,
 }: NavigationProps) {
   const { t } = useI18n();
+  const modeLabel =
+    storageMode === "local"
+      ? t("auth.localMode")
+      : authEnabled
+        ? t("auth.privateMode")
+        : t("auth.serverMode");
 
   return (
     <header className="sticky top-0 z-20 border-b border-slate-800/90 bg-slate-950/88 backdrop-blur">
@@ -54,7 +68,10 @@ export function Navigation({
               <p className="text-sm text-slate-400">{t("nav.subtitle")}</p>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-md border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm font-semibold text-slate-300">
+              {modeLabel}
+            </span>
             <button
               type="button"
               className="secondary-button px-3"
@@ -64,10 +81,16 @@ export function Navigation({
               <Globe2 aria-hidden="true" size={17} />
               {language.toUpperCase()}
             </button>
-            {authEnabled ? (
+            {authEnabled && isAuthenticated ? (
               <button type="button" className="secondary-button px-3" onClick={onLogout}>
                 <LogOut aria-hidden="true" size={17} />
                 {t("common.logout")}
+              </button>
+            ) : null}
+            {authEnabled && !isAuthenticated ? (
+              <button type="button" className="primary-button px-3" onClick={onLogin}>
+                <LogIn aria-hidden="true" size={17} />
+                {t("auth.login")}
               </button>
             ) : null}
           </div>

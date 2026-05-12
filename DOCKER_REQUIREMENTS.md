@@ -65,6 +65,8 @@ WORKOUT_PASSWORD_HASH='$argon2id$...'
 WORKOUT_AUTH_SECRET=replace-with-a-long-random-string
 ```
 
+When login is enabled, unauthenticated visitors use Local mode in their browser localStorage. Private SQLite data in `/srv/webdata/workout/workout.sqlite` is loaded only after login.
+
 ## Demo Data
 
 After rebuilding the image, seed sample workout plans and history into `/srv/webdata/workout/workout.sqlite`:

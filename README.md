@@ -168,7 +168,7 @@ Voice must be optional and configurable. The selected browser voice, language, r
 
 ## Storage
 
-The production app stores exercises, workout plans, completed sessions, and settings in SQLite through the local Node API.
+The production app stores private exercises, workout plans, completed sessions, and settings in SQLite through the local Node API.
 
 The database file lives in the Docker volume mounted at:
 
@@ -178,7 +178,7 @@ The database file lives in the Docker volume mounted at:
 
 Inside the container this path is mounted as `/data/workout.sqlite`.
 
-Existing browser localStorage data is migrated into SQLite on first API-backed load.
+When login is enabled, visitors who are not connected use guest data in browser localStorage under `workout.guest.*` keys. Private SQLite data is loaded only after login, and guest data is not imported automatically into the private database.
 
 ## Demo data
 
@@ -208,6 +208,8 @@ WORKOUT_AUTH_SECRET=replace-with-a-long-random-string
 ```
 
 `WORKOUT_AUTH_SECRET` signs the HTTP-only session cookie. If it is omitted, the password hash is used as the signing secret.
+
+When login is enabled, the app stays usable before login in Local mode. Use the Login button to switch into Private mode backed by SQLite.
 
 ## Docker
 

@@ -4,6 +4,8 @@ import { defaultSettings, type AppSettings } from "../models/settings";
 import type { WorkoutSession } from "../models/session";
 import type { WorkoutPlan } from "../models/workout";
 
+export type StorageMode = "local" | "server";
+
 type ServerData = {
   exercises: Exercise[];
   plans: WorkoutPlan[];
@@ -11,15 +13,14 @@ type ServerData = {
   settings: AppSettings;
 };
 
-const storageKeys = {
-  exercises: "workout.exercises",
-  plans: "workout.plans",
-  sessions: "workout.sessions",
-  settings: "workout.settings",
-  serverMigrated: "workout.serverMigrated.v1",
+const guestStorageKeys = {
+  exercises: "workout.guest.exercises.v1",
+  plans: "workout.guest.plans.v1",
+  sessions: "workout.guest.sessions.v1",
+  settings: "workout.guest.settings.v1",
 } as const;
 
-let serverDataPromise: Promise<ServerData | null> | null = null;
+let serverDataPromise: Promise<ServerData> | null = null;
 
 function canUseLocalStorage(): boolean {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
@@ -46,27 +47,6 @@ function writeLocalJson<T>(key: string, value: T): void {
   window.localStorage.setItem(key, JSON.stringify(value));
 }
 
-function localSnapshot(): ServerData {
-  return {
-    exercises: readLocalJson<Exercise[]>(storageKeys.exercises, []),
-    plans: readLocalJson<WorkoutPlan[]>(storageKeys.plans, []),
-    sessions: readLocalJson<WorkoutSession[]>(storageKeys.sessions, []),
-    settings: {
-      ...defaultSettings,
-      ...readLocalJson<Partial<AppSettings>>(storageKeys.settings, {}),
-    },
-  };
-}
-
-function hasLocalWorkoutData(data: ServerData): boolean {
-  return (
-    data.exercises.length > 0 ||
-    data.plans.length > 0 ||
-    data.sessions.length > 0 ||
-    canUseLocalStorage() && window.localStorage.getItem(storageKeys.settings) !== null
-  );
-}
-
 async function apiJson<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...options,
@@ -84,172 +64,124 @@ async function apiJson<T>(path: string, options?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-async function loadServerData(): Promise<ServerData | null> {
-  try {
-    const apiData = await apiJson<ServerData>("/api/data");
-    const localData = localSnapshot();
-    const wasMigrated =
-      canUseLocalStorage() && window.localStorage.getItem(storageKeys.serverMigrated) === "true";
+async function loadServerData(): Promise<ServerData> {
+  const apiData = await apiJson<ServerData>("/api/data");
 
-    if (!wasMigrated && hasLocalWorkoutData(localData)) {
-      const mergedData: ServerData = {
-        exercises: localData.exercises.length > 0 ? localData.exercises : apiData.exercises,
-        plans: localData.plans.length > 0 ? localData.plans : apiData.plans,
-        sessions: localData.sessions.length > 0 ? localData.sessions : apiData.sessions,
-        settings: {
-          ...defaultSettings,
-          ...apiData.settings,
-          ...localData.settings,
-        },
-      };
-      const importedData = await apiJson<ServerData>("/api/import", {
-        method: "POST",
-        body: JSON.stringify(mergedData),
-      });
-
-      if (canUseLocalStorage()) {
-        window.localStorage.setItem(storageKeys.serverMigrated, "true");
-      }
-
-      return importedData;
-    }
-
-    if (canUseLocalStorage()) {
-      window.localStorage.setItem(storageKeys.serverMigrated, "true");
-    }
-
-    return {
-      ...apiData,
-      settings: {
-        ...defaultSettings,
-        ...apiData.settings,
-      },
-    };
-  } catch {
-    return null;
-  }
+  return {
+    exercises: apiData.exercises,
+    plans: apiData.plans,
+    sessions: apiData.sessions,
+    settings: {
+      ...defaultSettings,
+      ...apiData.settings,
+    },
+  };
 }
 
-function getServerData(): Promise<ServerData | null> {
+function getServerData(): Promise<ServerData> {
   serverDataPromise ??= loadServerData();
   return serverDataPromise;
 }
 
-function mirrorLocalData(data: Partial<ServerData>): void {
-  if (data.exercises) {
-    writeLocalJson(storageKeys.exercises, data.exercises);
-  }
-
-  if (data.plans) {
-    writeLocalJson(storageKeys.plans, data.plans);
-  }
-
-  if (data.sessions) {
-    writeLocalJson(storageKeys.sessions, data.sessions);
-  }
-
-  if (data.settings) {
-    writeLocalJson(storageKeys.settings, data.settings);
-  }
-}
-
-async function saveToServer<T>(path: string, value: T): Promise<boolean> {
+async function readServerData(): Promise<ServerData> {
   try {
-    await apiJson(path, {
-      method: "PUT",
-      body: JSON.stringify(value),
-    });
-    return true;
+    return await getServerData();
   } catch {
-    return false;
+    return {
+      exercises: defaultExercises,
+      plans: [],
+      sessions: [],
+      settings: defaultSettings,
+    };
   }
 }
 
-export async function getExercises(): Promise<Exercise[]> {
-  const serverData = await getServerData();
+async function saveToServer<T>(path: string, value: T): Promise<void> {
+  await apiJson(path, {
+    method: "PUT",
+    body: JSON.stringify(value),
+  });
+  serverDataPromise = null;
+}
 
-  if (serverData) {
-    mirrorLocalData({ exercises: serverData.exercises });
-    return serverData.exercises;
-  }
-
-  const exercises = readLocalJson<Exercise[]>(storageKeys.exercises, []);
+function getLocalExercises(): Exercise[] {
+  const exercises = readLocalJson<Exercise[]>(guestStorageKeys.exercises, []);
 
   if (exercises.length > 0) {
     return exercises;
   }
 
-  void saveExercises(defaultExercises);
+  writeLocalJson(guestStorageKeys.exercises, defaultExercises);
   return defaultExercises;
 }
 
-export async function saveExercises(exercises: Exercise[]): Promise<void> {
-  mirrorLocalData({ exercises });
-
-  if (await saveToServer("/api/exercises", exercises)) {
-    serverDataPromise = null;
-  }
-}
-
-export async function getWorkoutPlans(): Promise<WorkoutPlan[]> {
-  const serverData = await getServerData();
-
-  if (serverData) {
-    mirrorLocalData({ plans: serverData.plans });
-    return serverData.plans;
+export async function getExercises(mode: StorageMode): Promise<Exercise[]> {
+  if (mode === "local") {
+    return getLocalExercises();
   }
 
-  return readLocalJson<WorkoutPlan[]>(storageKeys.plans, []);
+  return (await readServerData()).exercises;
 }
 
-export async function saveWorkoutPlans(plans: WorkoutPlan[]): Promise<void> {
-  mirrorLocalData({ plans });
-
-  if (await saveToServer("/api/plans", plans)) {
-    serverDataPromise = null;
-  }
-}
-
-export async function getSessions(): Promise<WorkoutSession[]> {
-  const serverData = await getServerData();
-
-  if (serverData) {
-    mirrorLocalData({ sessions: serverData.sessions });
-    return serverData.sessions;
+export async function saveExercises(exercises: Exercise[], mode: StorageMode): Promise<void> {
+  if (mode === "local") {
+    writeLocalJson(guestStorageKeys.exercises, exercises);
+    return;
   }
 
-  return readLocalJson<WorkoutSession[]>(storageKeys.sessions, []);
+  await saveToServer("/api/exercises", exercises);
 }
 
-export async function saveSessions(sessions: WorkoutSession[]): Promise<void> {
-  mirrorLocalData({ sessions });
-
-  if (await saveToServer("/api/sessions", sessions)) {
-    serverDataPromise = null;
+export async function getWorkoutPlans(mode: StorageMode): Promise<WorkoutPlan[]> {
+  if (mode === "local") {
+    return readLocalJson<WorkoutPlan[]>(guestStorageKeys.plans, []);
   }
+
+  return (await readServerData()).plans;
 }
 
-export async function getSettings(): Promise<AppSettings> {
-  const serverData = await getServerData();
+export async function saveWorkoutPlans(plans: WorkoutPlan[], mode: StorageMode): Promise<void> {
+  if (mode === "local") {
+    writeLocalJson(guestStorageKeys.plans, plans);
+    return;
+  }
 
-  if (serverData) {
-    mirrorLocalData({ settings: serverData.settings });
+  await saveToServer("/api/plans", plans);
+}
+
+export async function getSessions(mode: StorageMode): Promise<WorkoutSession[]> {
+  if (mode === "local") {
+    return readLocalJson<WorkoutSession[]>(guestStorageKeys.sessions, []);
+  }
+
+  return (await readServerData()).sessions;
+}
+
+export async function saveSessions(sessions: WorkoutSession[], mode: StorageMode): Promise<void> {
+  if (mode === "local") {
+    writeLocalJson(guestStorageKeys.sessions, sessions);
+    return;
+  }
+
+  await saveToServer("/api/sessions", sessions);
+}
+
+export async function getSettings(mode: StorageMode): Promise<AppSettings> {
+  if (mode === "local") {
     return {
       ...defaultSettings,
-      ...serverData.settings,
+      ...readLocalJson<Partial<AppSettings>>(guestStorageKeys.settings, {}),
     };
   }
 
-  return {
-    ...defaultSettings,
-    ...readLocalJson<Partial<AppSettings>>(storageKeys.settings, {}),
-  };
+  return (await readServerData()).settings;
 }
 
-export async function saveSettings(settings: AppSettings): Promise<void> {
-  mirrorLocalData({ settings });
-
-  if (await saveToServer("/api/settings", settings)) {
-    serverDataPromise = null;
+export async function saveSettings(settings: AppSettings, mode: StorageMode): Promise<void> {
+  if (mode === "local") {
+    writeLocalJson(guestStorageKeys.settings, settings);
+    return;
   }
+
+  await saveToServer("/api/settings", settings);
 }

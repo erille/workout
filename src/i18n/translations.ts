@@ -151,6 +151,9 @@ const en = {
   "auth.login": "Log in",
   "auth.invalid": "Invalid password.",
   "auth.error": "Unable to log in. Check the server and try again.",
+  "auth.localMode": "Local mode",
+  "auth.privateMode": "Private mode",
+  "auth.serverMode": "Server mode",
 } as const;
 
 const fr: Record<keyof typeof en, string> = {
@@ -304,6 +307,9 @@ const fr: Record<keyof typeof en, string> = {
   "auth.login": "Se connecter",
   "auth.invalid": "Mot de passe invalide.",
   "auth.error": "Connexion impossible. Verifie le serveur puis reessaie.",
+  "auth.localMode": "Mode local",
+  "auth.privateMode": "Mode prive",
+  "auth.serverMode": "Mode serveur",
 };
 
 export type TranslationKey = keyof typeof en;

@@ -7,6 +7,7 @@ import {
 } from "../services/authService";
 
 const defaultStatus: AuthStatus = {
+  apiAvailable: false,
   authEnabled: false,
   authenticated: false,
 };

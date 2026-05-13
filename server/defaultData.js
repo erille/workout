@@ -126,7 +126,7 @@ export const defaultSettings = {
 
 export const defaultProfile = {
   name: "",
-  selectedAvatarUrl: "/avatars/avatar-01.png",
+  selectedAvatarId: "avatar-01.png",
   avatar: {
     skinColor: "#d7a06f",
     hairColor: "#3b2417",

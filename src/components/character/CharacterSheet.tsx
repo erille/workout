@@ -57,16 +57,48 @@ type GraphTooltip = GraphPoint & {
   metricLabel: string;
 };
 
-const builtInAvatars = [
-  { url: "/avatars/avatar-01.png", labelKey: "character.avatarOption1" },
-  { url: "/avatars/avatar-02.png", labelKey: "character.avatarOption2" },
-  { url: "/avatars/avatar-03.png", labelKey: "character.avatarOption3" },
-  { url: "/avatars/avatar-04.png", labelKey: "character.avatarOption4" },
-  { url: "/avatars/avatar-05.png", labelKey: "character.avatarOption5" },
-  { url: "/avatars/avatar-06.png", labelKey: "character.avatarOption6" },
-  { url: "/avatars/avatar-07.png", labelKey: "character.avatarOption7" },
-  { url: "/avatars/avatar-08.png", labelKey: "character.avatarOption8" },
-] as const;
+type BuiltInAvatar = {
+  id: string;
+  label: string;
+  url: string;
+};
+
+const avatarModules = import.meta.glob("../../assets/avatars/*.{avif,jpeg,jpg,png,webp}", {
+  eager: true,
+  import: "default",
+  query: "?url",
+}) as Record<string, string>;
+
+function fileNameFromPath(path: string): string {
+  return path.split(/[\\/]/).pop() ?? path;
+}
+
+function avatarLabelFromFileName(fileName: string): string {
+  const baseName = fileName.replace(/\.[^.]+$/, "");
+  const numberedAvatar = baseName.match(/^avatar[-_]?0*(\d+)$/i);
+
+  if (numberedAvatar) {
+    return `Avatar ${Number(numberedAvatar[1])}`;
+  }
+
+  return baseName
+    .split(/[-_ ]+/)
+    .filter(Boolean)
+    .map((word) => `${word.slice(0, 1).toUpperCase()}${word.slice(1)}`)
+    .join(" ");
+}
+
+const builtInAvatars: BuiltInAvatar[] = Object.entries(avatarModules)
+  .map(([path, url]) => {
+    const id = fileNameFromPath(path);
+
+    return {
+      id,
+      label: avatarLabelFromFileName(id),
+      url,
+    };
+  })
+  .sort((left, right) => left.id.localeCompare(right.id, undefined, { numeric: true }));
 
 const metricDefinitions = [
   { key: "weightKg", labelKey: "character.weightKg", suffix: " kg", color: "#22d3ee" },
@@ -441,7 +473,15 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
   );
   const chronologicalMeasurements = useMemo(() => [...sortedMeasurements].reverse(), [sortedMeasurements]);
   const latestMeasurement = sortedMeasurements[0];
-  const selectedAvatarUrl = draft.selectedAvatarUrl ?? builtInAvatars[0].url;
+  const selectedAvatar =
+    builtInAvatars.find((avatar) => avatar.id === draft.selectedAvatarId) ??
+    builtInAvatars.find(
+      (avatar) =>
+        Boolean(draft.selectedAvatarUrl) &&
+        avatar.id === fileNameFromPath(draft.selectedAvatarUrl ?? ""),
+    ) ??
+    builtInAvatars[0];
+  const selectedAvatarUrl = selectedAvatar?.url ?? "";
   const metricLabels = useMemo(
     () =>
       Object.fromEntries(
@@ -456,10 +496,11 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
     setError(null);
   };
 
-  const updateBuiltInAvatar = (selectedAvatarUrl: string) => {
+  const updateBuiltInAvatar = (avatar: BuiltInAvatar) => {
     setDraft((current) => ({
       ...current,
-      selectedAvatarUrl,
+      selectedAvatarId: avatar.id,
+      selectedAvatarUrl: undefined,
       photoDataUrl: undefined,
     }));
     setIsAvatarMenuOpen(false);
@@ -626,7 +667,7 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
                   </div>
                   <div className="grid max-h-[70vh] grid-cols-2 gap-3 overflow-y-auto pr-1">
                     {builtInAvatars.map((avatar) => {
-                      const isSelected = selectedAvatarUrl === avatar.url && !draft.photoDataUrl;
+                      const isSelected = selectedAvatar?.id === avatar.id && !draft.photoDataUrl;
 
                       return (
                         <button
@@ -638,15 +679,15 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
                               : "border-slate-800 hover:border-slate-500"
                           }`}
                           aria-pressed={isSelected}
-                          onClick={() => updateBuiltInAvatar(avatar.url)}
+                          onClick={() => updateBuiltInAvatar(avatar)}
                         >
                           <img
                             className="aspect-[377/508] w-full object-contain"
                             src={avatar.url}
-                            alt={t(avatar.labelKey)}
+                            alt={avatar.label}
                           />
                           <span className="block px-2 py-1 text-xs font-semibold text-slate-300">
-                            {t(avatar.labelKey)}
+                            {avatar.label}
                           </span>
                         </button>
                       );

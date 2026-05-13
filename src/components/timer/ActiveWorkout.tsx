@@ -332,6 +332,12 @@ function WorkoutRunner({
     state.phase !== "idle" &&
     state.phase !== "stopped" &&
     state.phase !== "completed";
+  const audioMode =
+    settings.notificationMode === "voice"
+      ? t("settings.modeVoice")
+      : settings.notificationMode === "beep"
+        ? t("settings.modeBeeps")
+        : t("settings.modeOff");
 
   return (
     <section className="space-y-5">
@@ -488,11 +494,11 @@ function WorkoutRunner({
               </label>
             ) : null}
             <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-4">
-              <p className="label">{t("timer.voice")}</p>
+              <p className="label">{t("timer.audio")}</p>
               <p className="mt-2 text-sm text-slate-300">
-                {t("timer.voiceStatus", {
-                  status: settings.voiceEnabled ? t("common.enabled") : t("common.disabled"),
-                  rate: settings.voiceRate.toFixed(1),
+                {t("timer.audioStatus", {
+                  mode: audioMode,
+                  volume: settings.voiceVolume.toFixed(1),
                 })}
               </p>
             </div>

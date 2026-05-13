@@ -1,7 +1,7 @@
 import { defaultExercises } from "./defaultExercises";
 import type { Exercise } from "../models/exercise";
 import { defaultProfile, type CharacterProfile } from "../models/profile";
-import { defaultSettings, type AppSettings } from "../models/settings";
+import { defaultSettings, type AppSettings, type NotificationMode } from "../models/settings";
 import type { WorkoutSession } from "../models/session";
 import type { WorkoutPlan } from "../models/workout";
 
@@ -89,10 +89,7 @@ async function loadServerData(): Promise<ServerData> {
     exercises: apiData.exercises,
     plans: apiData.plans,
     sessions: apiData.sessions,
-    settings: {
-      ...defaultSettings,
-      ...apiData.settings,
-    },
+    settings: normalizeSettings(apiData.settings),
     profile: normalizeProfile(apiData.profile),
   };
 }
@@ -110,7 +107,7 @@ async function readServerData(): Promise<ServerData> {
       exercises: defaultExercises,
       plans: [],
       sessions: [],
-      settings: defaultSettings,
+      settings: normalizeSettings(),
       profile: defaultProfile,
     };
   }
@@ -144,6 +141,29 @@ function normalizeProfile(profile?: Partial<CharacterProfile>): CharacterProfile
       ...profile?.avatar,
     },
     measurements: Array.isArray(profile?.measurements) ? profile.measurements : [],
+  };
+}
+
+function normalizeNotificationMode(settings?: Partial<AppSettings>): NotificationMode {
+  if (
+    settings?.notificationMode === "voice" ||
+    settings?.notificationMode === "beep" ||
+    settings?.notificationMode === "off"
+  ) {
+    return settings.notificationMode;
+  }
+
+  return settings?.voiceEnabled === false ? "off" : defaultSettings.notificationMode;
+}
+
+function normalizeSettings(settings?: Partial<AppSettings>): AppSettings {
+  const notificationMode = normalizeNotificationMode(settings);
+
+  return {
+    ...defaultSettings,
+    ...settings,
+    notificationMode,
+    voiceEnabled: notificationMode === "voice",
   };
 }
 
@@ -200,22 +220,21 @@ export async function saveSessions(sessions: WorkoutSession[], mode: StorageMode
 
 export async function getSettings(mode: StorageMode): Promise<AppSettings> {
   if (mode === "local") {
-    return {
-      ...defaultSettings,
-      ...readLocalJson<Partial<AppSettings>>(guestStorageKeys.settings, {}),
-    };
+    return normalizeSettings(readLocalJson<Partial<AppSettings>>(guestStorageKeys.settings, {}));
   }
 
-  return (await readServerData()).settings;
+  return normalizeSettings((await readServerData()).settings);
 }
 
 export async function saveSettings(settings: AppSettings, mode: StorageMode): Promise<void> {
+  const normalizedSettings = normalizeSettings(settings);
+
   if (mode === "local") {
-    writeLocalJson(guestStorageKeys.settings, settings);
+    writeLocalJson(guestStorageKeys.settings, normalizedSettings);
     return;
   }
 
-  await saveToServer("/api/settings", settings);
+  await saveToServer("/api/settings", normalizedSettings);
 }
 
 export async function getProfile(mode: StorageMode): Promise<CharacterProfile> {

@@ -10,6 +10,7 @@ import {
   getNextStep,
   getStepAnnouncement,
 } from "../services/workoutEngine";
+import { cancelAudioCues, playAudioCue, type AudioCueType } from "../services/audioCueService";
 import { cancelSpeech, speak } from "../services/speechService";
 
 export type TimerPhase =
@@ -103,11 +104,17 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
     setCompletedSession(null);
     setState(createInitialState(plan));
     cancelSpeech();
+    cancelAudioCues();
   }, [plan]);
 
-  const announce = useCallback(
-    (text: string) => {
-      if (!settings.voiceEnabled) {
+  const notify = useCallback(
+    (cue: AudioCueType, text: string) => {
+      if (settings.notificationMode === "off") {
+        return;
+      }
+
+      if (settings.notificationMode === "beep") {
+        playAudioCue(cue, settings.voiceVolume);
         return;
       }
 
@@ -172,9 +179,9 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
       remainingSeconds: 0,
       completedAt,
     });
-    announce(getCompleteAnnouncement(settings.language));
+    notify("complete", getCompleteAnnouncement(settings.language));
     void onComplete(session);
-  }, [announce, onComplete, plan, settings.language]);
+  }, [notify, onComplete, plan, settings.language]);
 
   const beginStep = useCallback(
     (round: number, stepIndex: number, startedAt?: string) => {
@@ -185,7 +192,7 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
         return;
       }
 
-      announce(getStepAnnouncement(step, settings.language));
+      notify("work", getStepAnnouncement(step, settings.language));
 
       if (step.type === "time") {
         targetEndTimeRef.current = Date.now() + step.durationSeconds * 1000;
@@ -216,7 +223,7 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
         completedAt: undefined,
       }));
     },
-    [announce, completeWorkout, plan, settings.language],
+    [completeWorkout, notify, plan, settings.language],
   );
 
   const advanceAfterBreak = useCallback(
@@ -252,7 +259,7 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
         return;
       }
 
-      announce(getBreakAnnouncement(step.breakSeconds, settings.language));
+      notify("rest", getBreakAnnouncement(step.breakSeconds, settings.language));
       targetEndTimeRef.current = Date.now() + step.breakSeconds * 1000;
       setState((previousState) => ({
         ...previousState,
@@ -263,7 +270,7 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
         remainingSeconds: step.breakSeconds,
       }));
     },
-    [advanceAfterBreak, announce, completeWorkout, plan.steps, recordStepCompletion, settings.language],
+    [advanceAfterBreak, completeWorkout, notify, plan.steps, recordStepCompletion, settings.language],
   );
 
   useEffect(() => {
@@ -375,6 +382,7 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
 
   const stopWorkout = useCallback(() => {
     cancelSpeech();
+    cancelAudioCues();
     targetEndTimeRef.current = null;
     setState((previousState) => ({
       ...previousState,

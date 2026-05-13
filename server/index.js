@@ -286,10 +286,16 @@ function writeCollection(table, items) {
 
 function readSettings() {
   const row = db.prepare("SELECT data FROM settings WHERE id = 1").get();
+  const savedSettings = row ? JSON.parse(row.data) : {};
+  const notificationMode =
+    savedSettings.notificationMode ??
+    (savedSettings.voiceEnabled === false ? "off" : defaultSettings.notificationMode);
 
   return {
     ...defaultSettings,
-    ...(row ? JSON.parse(row.data) : {}),
+    ...savedSettings,
+    notificationMode,
+    voiceEnabled: notificationMode === "voice",
   };
 }
 
@@ -298,11 +304,20 @@ function writeSettings(settings) {
     throw new Error("Settings payload must be an object.");
   }
 
+  const notificationMode =
+    settings.notificationMode ??
+    (settings.voiceEnabled === false ? "off" : defaultSettings.notificationMode);
+
   db.prepare(
     `INSERT INTO settings (id, data, updated_at)
      VALUES (1, ?, ?)
      ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
-  ).run(JSON.stringify({ ...defaultSettings, ...settings }), new Date().toISOString());
+  ).run(JSON.stringify({
+    ...defaultSettings,
+    ...settings,
+    notificationMode,
+    voiceEnabled: notificationMode === "voice",
+  }), new Date().toISOString());
 }
 
 function normalizeProfile(profile) {

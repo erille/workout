@@ -1,8 +1,9 @@
-import { Save, Volume2, VolumeX } from "lucide-react";
+import { Save, Volume1, Volume2, VolumeX } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import { useI18n } from "../../i18n/I18nContext";
 import type { Language } from "../../i18n/translations";
-import type { AppSettings } from "../../models/settings";
+import type { AppSettings, NotificationMode } from "../../models/settings";
+import { isAudioCueSupported, playAudioCue } from "../../services/audioCueService";
 import {
   getSpeechVoices,
   isSpeechSupported,
@@ -29,13 +30,28 @@ function voiceLabel(
   return `${voice.name} (${voice.lang}, ${source}${defaultLabel})`;
 }
 
+function notificationIcon(mode: NotificationMode) {
+  if (mode === "off") {
+    return <VolumeX aria-hidden="true" size={22} />;
+  }
+
+  if (mode === "beep") {
+    return <Volume1 aria-hidden="true" size={22} />;
+  }
+
+  return <Volume2 aria-hidden="true" size={22} />;
+}
+
 export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
   const { t } = useI18n();
   const [draft, setDraft] = useState<AppSettings>(settings);
   const [message, setMessage] = useState<string | null>(null);
   const [voices, setVoices] = useState<SpeechVoiceOption[]>([]);
   const speechSupported = isSpeechSupported();
+  const audioCueSupported = isAudioCueSupported();
   const hasFrenchVoice = voices.some((voice) => voice.lang.toLowerCase().startsWith("fr"));
+  const isVoiceMode = draft.notificationMode === "voice";
+  const isBeepMode = draft.notificationMode === "beep";
 
   useEffect(() => {
     setDraft(settings);
@@ -70,6 +86,33 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
     setMessage(null);
   };
 
+  const updateNotificationMode = (notificationMode: NotificationMode) => {
+    updateDraft({
+      notificationMode,
+      voiceEnabled: notificationMode === "voice",
+    });
+  };
+
+  const notificationOptions: Array<{
+    mode: NotificationMode;
+    label: string;
+    disabled: boolean;
+  }> = [
+    { mode: "voice", label: t("settings.modeVoice"), disabled: !speechSupported },
+    { mode: "beep", label: t("settings.modeBeeps"), disabled: !audioCueSupported },
+    { mode: "off", label: t("settings.modeOff"), disabled: false },
+  ];
+  const audioStatusText =
+    draft.notificationMode === "off"
+      ? t("settings.audioOff")
+      : isBeepMode
+        ? audioCueSupported
+          ? t("settings.beepsAvailable")
+          : t("settings.beepsUnavailable")
+        : speechSupported
+          ? t("settings.speechAvailable")
+          : t("settings.speechUnavailable");
+
   return (
     <section className="mx-auto max-w-3xl space-y-5">
       <div>
@@ -78,33 +121,40 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
       </div>
 
       <form className="panel space-y-5 p-4 sm:p-6" onSubmit={handleSubmit}>
-        <div className="flex flex-col gap-3 rounded-lg border border-slate-800 bg-slate-950/70 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-md bg-slate-800 text-cyan-200">
-              {draft.voiceEnabled ? (
-                <Volume2 aria-hidden="true" size={22} />
-              ) : (
-                <VolumeX aria-hidden="true" size={22} />
-              )}
+        <div className="space-y-4 rounded-lg border border-slate-800 bg-slate-950/70 p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-md bg-slate-800 text-cyan-200">
+                {notificationIcon(draft.notificationMode)}
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-50">{t("settings.audioMode")}</h3>
+                <p className="text-sm text-slate-400">{audioStatusText}</p>
+              </div>
             </div>
-            <div>
-              <h3 className="font-bold text-slate-50">{t("settings.trainerVoice")}</h3>
-              <p className="text-sm text-slate-400">
-                {speechSupported ? t("settings.speechAvailable") : t("settings.speechUnavailable")}
-              </p>
+            <div className="grid grid-cols-3 gap-2 sm:w-72">
+              {notificationOptions.map((option) => {
+                const isSelected = draft.notificationMode === option.mode;
+
+                return (
+                  <button
+                    key={option.mode}
+                    type="button"
+                    className={`rounded-md border px-3 py-2 text-sm font-semibold transition ${
+                      isSelected
+                        ? "border-cyan-300 bg-cyan-300 text-slate-950"
+                        : "border-slate-700 bg-slate-900 text-slate-200 hover:border-slate-500 hover:bg-slate-800"
+                    } disabled:cursor-not-allowed disabled:opacity-50`}
+                    disabled={option.disabled}
+                    aria-pressed={isSelected}
+                    onClick={() => updateNotificationMode(option.mode)}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
-          <label className="inline-flex cursor-pointer items-center gap-3">
-            <span className="text-sm font-semibold text-slate-300">
-              {draft.voiceEnabled ? t("settings.on") : t("settings.off")}
-            </span>
-            <input
-              className="h-5 w-5 accent-cyan-300"
-              type="checkbox"
-              checked={draft.voiceEnabled}
-              onChange={(event) => updateDraft({ voiceEnabled: event.target.checked })}
-            />
-          </label>
         </div>
 
         <label className="block space-y-2">
@@ -124,69 +174,96 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
           </select>
         </label>
 
-        <label className="block space-y-2">
-          <span className="label">{t("settings.voice")}</span>
-          <select
-            className="field"
-            disabled={!speechSupported || voices.length === 0}
-            value={draft.voiceURI ?? ""}
-            onChange={(event) =>
-              updateDraft({
-                voiceURI: event.target.value === "" ? undefined : event.target.value,
-              })
-            }
-          >
-            <option value="">{t("settings.systemDefault")}</option>
-            {voices.map((voice) => (
-              <option key={voice.voiceURI} value={voice.voiceURI}>
-                {voiceLabel(voice, {
-                  defaultLabel: t("common.default"),
-                  local: t("common.local"),
-                  remote: t("common.remote"),
-                })}
-              </option>
-            ))}
-          </select>
-          <p className="text-sm text-slate-400">
-            {voices.length > 0
-              ? t("settings.voicesAvailable", {
-                  count: voices.length,
-                  plural: voices.length === 1 ? "" : "s",
+        {isVoiceMode ? (
+          <label className="block space-y-2">
+            <span className="label">{t("settings.voice")}</span>
+            <select
+              className="field"
+              disabled={!speechSupported || voices.length === 0}
+              value={draft.voiceURI ?? ""}
+              onChange={(event) =>
+                updateDraft({
+                  voiceURI: event.target.value === "" ? undefined : event.target.value,
                 })
-              : t("settings.noVoices")}
-          </p>
-          {draft.language === "fr" && voices.length > 0 && !hasFrenchVoice ? (
-            <p className="text-sm text-amber-200">{t("settings.noFrenchVoice")}</p>
-          ) : null}
-        </label>
+              }
+            >
+              <option value="">{t("settings.systemDefault")}</option>
+              {voices.map((voice) => (
+                <option key={voice.voiceURI} value={voice.voiceURI}>
+                  {voiceLabel(voice, {
+                    defaultLabel: t("common.default"),
+                    local: t("common.local"),
+                    remote: t("common.remote"),
+                  })}
+                </option>
+              ))}
+            </select>
+            <p className="text-sm text-slate-400">
+              {voices.length > 0
+                ? t("settings.voicesAvailable", {
+                    count: voices.length,
+                    plural: voices.length === 1 ? "" : "s",
+                  })
+                : t("settings.noVoices")}
+            </p>
+            {draft.language === "fr" && voices.length > 0 && !hasFrenchVoice ? (
+              <p className="text-sm text-amber-200">{t("settings.noFrenchVoice")}</p>
+            ) : null}
+          </label>
+        ) : null}
 
-        <div className="grid gap-5 sm:grid-cols-3">
-          <label className="space-y-3">
-            <span className="label">{t("settings.rate", { value: numberValue(draft.voiceRate) })}</span>
-            <input
-              className="w-full accent-cyan-300"
-              min={0.5}
-              max={2}
-              step={0.1}
-              type="range"
-              value={draft.voiceRate}
-              onChange={(event) => updateDraft({ voiceRate: Number(event.target.value) })}
-            />
-          </label>
-          <label className="space-y-3">
-            <span className="label">{t("settings.pitch", { value: numberValue(draft.voicePitch) })}</span>
-            <input
-              className="w-full accent-cyan-300"
-              min={0}
-              max={2}
-              step={0.1}
-              type="range"
-              value={draft.voicePitch}
-              onChange={(event) => updateDraft({ voicePitch: Number(event.target.value) })}
-            />
-          </label>
-          <label className="space-y-3">
-            <span className="label">{t("settings.volume", { value: numberValue(draft.voiceVolume) })}</span>
+        {isVoiceMode ? (
+          <div className="grid gap-5 sm:grid-cols-3">
+            <label className="space-y-3">
+              <span className="label">
+                {t("settings.rate", { value: numberValue(draft.voiceRate) })}
+              </span>
+              <input
+                className="w-full accent-cyan-300"
+                min={0.5}
+                max={2}
+                step={0.1}
+                type="range"
+                value={draft.voiceRate}
+                onChange={(event) => updateDraft({ voiceRate: Number(event.target.value) })}
+              />
+            </label>
+            <label className="space-y-3">
+              <span className="label">
+                {t("settings.pitch", { value: numberValue(draft.voicePitch) })}
+              </span>
+              <input
+                className="w-full accent-cyan-300"
+                min={0}
+                max={2}
+                step={0.1}
+                type="range"
+                value={draft.voicePitch}
+                onChange={(event) => updateDraft({ voicePitch: Number(event.target.value) })}
+              />
+            </label>
+            <label className="space-y-3">
+              <span className="label">
+                {t("settings.volume", { value: numberValue(draft.voiceVolume) })}
+              </span>
+              <input
+                className="w-full accent-cyan-300"
+                min={0}
+                max={1}
+                step={0.1}
+                type="range"
+                value={draft.voiceVolume}
+                onChange={(event) => updateDraft({ voiceVolume: Number(event.target.value) })}
+              />
+            </label>
+          </div>
+        ) : null}
+
+        {isBeepMode ? (
+          <label className="block space-y-3">
+            <span className="label">
+              {t("settings.volume", { value: numberValue(draft.voiceVolume) })}
+            </span>
             <input
               className="w-full accent-cyan-300"
               min={0}
@@ -197,7 +274,7 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
               onChange={(event) => updateDraft({ voiceVolume: Number(event.target.value) })}
             />
           </label>
-        </div>
+        ) : null}
 
         <label className="block space-y-2">
           <span className="label">{t("settings.theme")}</span>
@@ -224,23 +301,47 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
             <Save aria-hidden="true" size={17} />
             {t("settings.save")}
           </button>
-          <button
-            type="button"
-            className="secondary-button"
-            disabled={!speechSupported || !draft.voiceEnabled}
-            onClick={() =>
-              speak(t("settings.previewText"), {
-                voiceURI: draft.voiceURI,
-                language: draft.language,
-                rate: draft.voiceRate,
-                pitch: draft.voicePitch,
-                volume: draft.voiceVolume,
-              })
-            }
-          >
-            <Volume2 aria-hidden="true" size={17} />
-            {t("settings.previewVoice")}
-          </button>
+          {isVoiceMode ? (
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={!speechSupported}
+              onClick={() =>
+                speak(t("settings.previewText"), {
+                  voiceURI: draft.voiceURI,
+                  language: draft.language,
+                  rate: draft.voiceRate,
+                  pitch: draft.voicePitch,
+                  volume: draft.voiceVolume,
+                })
+              }
+            >
+              <Volume2 aria-hidden="true" size={17} />
+              {t("settings.previewVoice")}
+            </button>
+          ) : null}
+          {isBeepMode ? (
+            <>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={!audioCueSupported}
+                onClick={() => playAudioCue("work", draft.voiceVolume)}
+              >
+                <Volume1 aria-hidden="true" size={17} />
+                {t("settings.previewWorkBeep")}
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={!audioCueSupported}
+                onClick={() => playAudioCue("rest", draft.voiceVolume)}
+              >
+                <Volume1 aria-hidden="true" size={17} />
+                {t("settings.previewRestBeep")}
+              </button>
+            </>
+          ) : null}
         </div>
       </form>
     </section>

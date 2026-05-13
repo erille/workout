@@ -30,6 +30,7 @@ export type CharacterProfile = {
   name: string;
   age?: number;
   heightCm?: number;
+  selectedAvatarUrl?: string;
   photoDataUrl?: string;
   avatar: AvatarSettings;
   measurements: BodyMeasurement[];
@@ -48,6 +49,7 @@ export const defaultAvatar: AvatarSettings = {
 
 export const defaultProfile: CharacterProfile = {
   name: "",
+  selectedAvatarUrl: "/avatars/avatar-01.png",
   avatar: defaultAvatar,
   measurements: [],
   updatedAt: "2026-01-01T00:00:00.000Z",

@@ -10,9 +10,6 @@ import {
 } from "react";
 import { useI18n } from "../../i18n/I18nContext";
 import type {
-  AvatarBodyType,
-  AvatarHeadShape,
-  AvatarSettings,
   BodyMeasurement,
   CharacterProfile,
 } from "../../models/profile";
@@ -60,19 +57,15 @@ type GraphTooltip = GraphPoint & {
   metricLabel: string;
 };
 
-const swatches = [
-  { value: "#f2c09a", labelKey: "color.lightPeach" },
-  { value: "#d7a06f", labelKey: "color.warmTan" },
-  { value: "#8d5524", labelKey: "color.brown" },
-  { value: "#3b2417", labelKey: "color.darkBrown" },
-  { value: "#22d3ee", labelKey: "color.cyan" },
-  { value: "#0891b2", labelKey: "color.teal" },
-  { value: "#16a34a", labelKey: "color.green" },
-  { value: "#f97316", labelKey: "color.orange" },
-  { value: "#e11d48", labelKey: "color.crimson" },
-  { value: "#334155", labelKey: "color.slate" },
-  { value: "#f8fafc", labelKey: "color.white" },
-  { value: "#111827", labelKey: "color.black" },
+const builtInAvatars = [
+  { url: "/avatars/avatar-01.png", labelKey: "character.avatarOption1" },
+  { url: "/avatars/avatar-02.png", labelKey: "character.avatarOption2" },
+  { url: "/avatars/avatar-03.png", labelKey: "character.avatarOption3" },
+  { url: "/avatars/avatar-04.png", labelKey: "character.avatarOption4" },
+  { url: "/avatars/avatar-05.png", labelKey: "character.avatarOption5" },
+  { url: "/avatars/avatar-06.png", labelKey: "character.avatarOption6" },
+  { url: "/avatars/avatar-07.png", labelKey: "character.avatarOption7" },
+  { url: "/avatars/avatar-08.png", labelKey: "character.avatarOption8" },
 ] as const;
 
 const metricDefinitions = [
@@ -400,33 +393,6 @@ function resizePhoto(file: File): Promise<string> {
   });
 }
 
-function AvatarPreview({ avatar }: { avatar: AvatarSettings }) {
-  const headRx = avatar.headShape === "round" ? 14 : avatar.headShape === "long" ? 8 : 2;
-  const headHeight = avatar.headShape === "long" ? 46 : 38;
-  const headY = avatar.headShape === "long" ? 16 : 24;
-  const torsoWidth = avatar.bodyType === "slim" ? 50 : avatar.bodyType === "strong" ? 78 : 64;
-  const torsoX = 80 - torsoWidth / 2;
-  const armWidth = avatar.bodyType === "strong" ? 18 : 14;
-
-  return (
-    <svg className="h-64 w-full" viewBox="0 0 160 230" role="img" aria-label="Character avatar">
-      <rect x="0" y="0" width="160" height="230" rx="12" fill="#020617" />
-      <rect x="56" y={headY} width="48" height={headHeight} rx={headRx} fill={avatar.skinColor} />
-      <rect x="58" y={headY} width="44" height="12" rx="2" fill={avatar.hairColor} />
-      <rect x="68" y={headY + 22} width="7" height="7" rx="1" fill={avatar.eyeColor} />
-      <rect x="86" y={headY + 22} width="7" height="7" rx="1" fill={avatar.eyeColor} />
-      <rect x="72" y={headY + 34} width="16" height="3" rx="1" fill="#4b1f18" opacity="0.75" />
-      <rect x={torsoX} y="76" width={torsoWidth} height="68" rx="3" fill={avatar.shirtColor} />
-      <rect x={torsoX - armWidth - 4} y="80" width={armWidth} height="74" rx="3" fill={avatar.skinColor} />
-      <rect x={torsoX + torsoWidth + 4} y="80" width={armWidth} height="74" rx="3" fill={avatar.skinColor} />
-      <rect x="56" y="144" width="22" height="60" rx="3" fill={avatar.pantsColor} />
-      <rect x="82" y="144" width="22" height="60" rx="3" fill={avatar.pantsColor} />
-      <rect x="52" y="202" width="30" height="10" rx="2" fill="#0f172a" />
-      <rect x="78" y="202" width="30" height="10" rx="2" fill="#0f172a" />
-    </svg>
-  );
-}
-
 export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) {
   const { t } = useI18n();
   const [draft, setDraft] = useState<CharacterProfile>(profile);
@@ -448,6 +414,7 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
   );
   const chronologicalMeasurements = useMemo(() => [...sortedMeasurements].reverse(), [sortedMeasurements]);
   const latestMeasurement = sortedMeasurements[0];
+  const selectedAvatarUrl = draft.selectedAvatarUrl ?? builtInAvatars[0].url;
   const metricLabels = useMemo(
     () =>
       Object.fromEntries(
@@ -462,13 +429,11 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
     setError(null);
   };
 
-  const updateAvatar = (partial: Partial<AvatarSettings>) => {
+  const updateBuiltInAvatar = (selectedAvatarUrl: string) => {
     setDraft((current) => ({
       ...current,
-      avatar: {
-        ...current.avatar,
-        ...partial,
-      },
+      selectedAvatarUrl,
+      photoDataUrl: undefined,
     }));
     setProfileMessage(null);
     setError(null);
@@ -598,17 +563,13 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
               </h3>
             </div>
           </div>
-          {draft.photoDataUrl ? (
-            <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950">
-              <img
-                className="h-64 w-full object-cover"
-                src={draft.photoDataUrl}
-                alt={draft.name.trim() || t("character.unnamed")}
-              />
-            </div>
-          ) : (
-            <AvatarPreview avatar={draft.avatar} />
-          )}
+          <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950">
+            <img
+              className="h-64 w-full object-cover"
+              src={draft.photoDataUrl ?? selectedAvatarUrl}
+              alt={draft.name.trim() || t("character.unnamed")}
+            />
+          </div>
           <div className="flex flex-col gap-2 sm:flex-row">
             <label className="secondary-button cursor-pointer">
               <ImageUp aria-hidden="true" size={17} />
@@ -622,81 +583,41 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
               </button>
             ) : null}
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            {[
-              ["skinColor", t("character.skinColor")],
-              ["hairColor", t("character.hairColor")],
-              ["eyeColor", t("character.eyeColor")],
-              ["shirtColor", t("character.shirtColor")],
-              ["pantsColor", t("character.pantsColor")],
-            ].map(([key, label]) => (
-              <label key={key} className="space-y-2">
-                <span className="label">{label}</span>
-                <div className="flex items-center gap-2">
-                  {(() => {
-                    const colorValue = draft.avatar[key as keyof AvatarSettings] as string;
-                    const isKnownSwatch = swatches.some((swatch) => swatch.value === colorValue);
+          <div className="space-y-3">
+            <div>
+              <p className="label">{t("character.builtInAvatars")}</p>
+              {draft.photoDataUrl ? (
+                <p className="mt-1 text-sm text-slate-400">{t("character.photoOverridesAvatar")}</p>
+              ) : null}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {builtInAvatars.map((avatar) => {
+                const isSelected = selectedAvatarUrl === avatar.url && !draft.photoDataUrl;
 
-                    return (
-                      <>
-                  <input
-                    className="h-10 w-12 rounded-md border border-slate-700 bg-slate-950"
-                    type="color"
-                    value={colorValue}
-                    onChange={(event) =>
-                      updateAvatar({ [key]: event.target.value } as Partial<AvatarSettings>)
-                    }
-                  />
-                  <select
-                    className="field"
-                    value={colorValue}
-                    onChange={(event) =>
-                      updateAvatar({ [key]: event.target.value } as Partial<AvatarSettings>)
-                    }
+                return (
+                  <button
+                    key={avatar.url}
+                    type="button"
+                    className={`overflow-hidden rounded-md border bg-slate-950 text-left transition ${
+                      isSelected
+                        ? "border-cyan-300 ring-2 ring-cyan-300/35"
+                        : "border-slate-800 hover:border-slate-500"
+                    }`}
+                    aria-pressed={isSelected}
+                    onClick={() => updateBuiltInAvatar(avatar.url)}
                   >
-                    {!isKnownSwatch ? (
-                      <option value={colorValue}>{t("color.custom")}</option>
-                    ) : null}
-                    {swatches.map((swatch) => (
-                      <option key={swatch.value} value={swatch.value}>
-                        {t(swatch.labelKey)}
-                      </option>
-                    ))}
-                  </select>
-                      </>
-                    );
-                  })()}
-                </div>
-              </label>
-            ))}
-            <label className="space-y-2">
-              <span className="label">{t("character.headShape")}</span>
-              <select
-                className="field"
-                value={draft.avatar.headShape}
-                onChange={(event) =>
-                  updateAvatar({ headShape: event.target.value as AvatarHeadShape })
-                }
-              >
-                <option value="square">{t("character.headSquare")}</option>
-                <option value="round">{t("character.headRound")}</option>
-                <option value="long">{t("character.headLong")}</option>
-              </select>
-            </label>
-            <label className="space-y-2">
-              <span className="label">{t("character.bodyType")}</span>
-              <select
-                className="field"
-                value={draft.avatar.bodyType}
-                onChange={(event) =>
-                  updateAvatar({ bodyType: event.target.value as AvatarBodyType })
-                }
-              >
-                <option value="slim">{t("character.bodySlim")}</option>
-                <option value="regular">{t("character.bodyRegular")}</option>
-                <option value="strong">{t("character.bodyStrong")}</option>
-              </select>
-            </label>
+                    <img
+                      className="aspect-square w-full object-cover"
+                      src={avatar.url}
+                      alt={t(avatar.labelKey)}
+                    />
+                    <span className="block px-2 py-1 text-xs font-semibold text-slate-300">
+                      {t(avatar.labelKey)}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </aside>
 

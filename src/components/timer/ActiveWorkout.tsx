@@ -1,4 +1,11 @@
 import { Check, Pause, Play, RotateCcw, Square, TimerReset } from "lucide-react";
+import { type FormEvent, useEffect, useState } from "react";
+import {
+  defaultQuickTimerSettings,
+  getQuickTimerSettings,
+  saveQuickTimerSettings,
+  type QuickTimerSettings,
+} from "../../data/storage";
 import { useI18n } from "../../i18n/I18nContext";
 import { translateExerciseName } from "../../i18n/exerciseNames";
 import type { Language } from "../../i18n/translations";
@@ -7,6 +14,7 @@ import type { WorkoutSession } from "../../models/session";
 import type { WorkoutPlan, WorkoutStep } from "../../models/workout";
 import { useWorkoutTimer } from "../../hooks/useWorkoutTimer";
 import { formatDateTime, formatSeconds, getElapsedSeconds } from "../../utils/format";
+import { createId } from "../../utils/id";
 
 type ActiveWorkoutProps = {
   plan: WorkoutPlan | null;
@@ -15,6 +23,8 @@ type ActiveWorkoutProps = {
   onSelectPlan: (plan: WorkoutPlan | null) => void;
   onSessionComplete: (session: WorkoutSession) => void | Promise<void>;
 };
+
+type TimerMode = "quick" | "plans";
 
 function formatTimerDisplay(totalSeconds: number): string {
   const seconds = Math.max(0, Math.round(totalSeconds));
@@ -54,14 +64,10 @@ function PlanChooser({
   plans,
   onSelectPlan,
 }: Pick<ActiveWorkoutProps, "plans" | "onSelectPlan">) {
-  const { language, t } = useI18n();
+  const { t } = useI18n();
 
   return (
-    <section className="space-y-4">
-      <div>
-        <p className="label">{t("nav.timer")}</p>
-        <h2 className="text-2xl font-bold text-slate-50">{t("timer.choose")}</h2>
-      </div>
+    <div className="space-y-4">
       {plans.length === 0 ? (
         <div className="panel p-6 text-slate-300">{t("timer.createPlan")}</div>
       ) : (
@@ -85,7 +91,150 @@ function PlanChooser({
           ))}
         </div>
       )}
-    </section>
+    </div>
+  );
+}
+
+function createQuickTimerPlan(settings: QuickTimerSettings, workLabel: string): WorkoutPlan {
+  const now = new Date().toISOString();
+
+  return {
+    id: createId("quick-timer"),
+    name: settings.name.trim() || defaultQuickTimerSettings.name,
+    rounds: Math.max(1, Math.round(settings.rounds)),
+    steps: [
+      {
+        id: createId("quick-step"),
+        type: "time",
+        exerciseId: "quick-work",
+        exerciseName: workLabel,
+        durationSeconds: Math.max(1, Math.round(settings.workSeconds)),
+        breakSeconds: Math.max(0, Math.round(settings.restSeconds)),
+      },
+    ],
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function QuickTimerSetup({ onStart }: { onStart: (plan: WorkoutPlan) => void }) {
+  const { t } = useI18n();
+  const [settings, setSettings] = useState<QuickTimerSettings>(defaultQuickTimerSettings);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    getQuickTimerSettings()
+      .then((savedSettings) => {
+        if (isMounted) {
+          setSettings(savedSettings);
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const updateSettings = (partial: Partial<QuickTimerSettings>) => {
+    setSettings((current) => ({ ...current, ...partial }));
+    setError(null);
+  };
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const normalizedSettings: QuickTimerSettings = {
+      name: settings.name.trim() || defaultQuickTimerSettings.name,
+      workSeconds: Math.max(1, Math.round(Number(settings.workSeconds))),
+      restSeconds: Math.max(0, Math.round(Number(settings.restSeconds))),
+      rounds: Math.max(1, Math.round(Number(settings.rounds))),
+    };
+
+    if (
+      !Number.isFinite(normalizedSettings.workSeconds) ||
+      !Number.isFinite(normalizedSettings.restSeconds) ||
+      !Number.isFinite(normalizedSettings.rounds)
+    ) {
+      setError(t("timer.quickError"));
+      return;
+    }
+
+    await saveQuickTimerSettings(normalizedSettings);
+    setSettings(normalizedSettings);
+    onStart(createQuickTimerPlan(normalizedSettings, t("timer.quickWork")));
+  };
+
+  return (
+    <form className="panel space-y-4 p-4" onSubmit={handleSubmit}>
+      <div>
+        <p className="label">{t("timer.quickTimer")}</p>
+        <h3 className="text-xl font-bold text-slate-50">{t("timer.quickTitle")}</h3>
+        <p className="mt-1 text-sm text-slate-400">{t("timer.quickDescription")}</p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_9rem_9rem_8rem_auto] lg:items-end">
+        <label className="space-y-2">
+          <span className="label">{t("timer.quickName")}</span>
+          <input
+            className="field"
+            disabled={isLoading}
+            value={settings.name}
+            onChange={(event) => updateSettings({ name: event.target.value })}
+          />
+        </label>
+        <label className="space-y-2">
+          <span className="label">{t("timer.workSeconds")}</span>
+          <input
+            className="field"
+            disabled={isLoading}
+            min={1}
+            type="number"
+            value={settings.workSeconds}
+            onChange={(event) => updateSettings({ workSeconds: Number(event.target.value) })}
+          />
+        </label>
+        <label className="space-y-2">
+          <span className="label">{t("timer.restSeconds")}</span>
+          <input
+            className="field"
+            disabled={isLoading}
+            min={0}
+            type="number"
+            value={settings.restSeconds}
+            onChange={(event) => updateSettings({ restSeconds: Number(event.target.value) })}
+          />
+        </label>
+        <label className="space-y-2">
+          <span className="label">{t("common.rounds")}</span>
+          <input
+            className="field"
+            disabled={isLoading}
+            min={1}
+            type="number"
+            value={settings.rounds}
+            onChange={(event) => updateSettings({ rounds: Number(event.target.value) })}
+          />
+        </label>
+        <button type="submit" className="primary-button h-11" disabled={isLoading}>
+          <Play aria-hidden="true" size={17} />
+          {t("timer.startQuickTimer")}
+        </button>
+      </div>
+
+      {error ? (
+        <div className="rounded-md border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
+          {error}
+        </div>
+      ) : null}
+    </form>
   );
 }
 
@@ -133,13 +282,17 @@ function SessionSummary({ session }: { session: WorkoutSession }) {
 function WorkoutRunner({
   plan,
   settings,
-  onSelectPlan,
+  onExit,
   onSessionComplete,
+  saveSession = true,
+  allowWeightAdjust = true,
 }: {
   plan: WorkoutPlan;
   settings: AppSettings;
-  onSelectPlan: (plan: WorkoutPlan | null) => void;
+  onExit: () => void;
   onSessionComplete: (session: WorkoutSession) => void | Promise<void>;
+  saveSession?: boolean;
+  allowWeightAdjust?: boolean;
 }) {
   const { language, t } = useI18n();
   const {
@@ -157,7 +310,7 @@ function WorkoutRunner({
   } = useWorkoutTimer({
     plan,
     settings,
-    onComplete: onSessionComplete,
+    onComplete: saveSession ? onSessionComplete : () => undefined,
   });
 
   const isRunning =
@@ -174,6 +327,7 @@ function WorkoutRunner({
   const progressPercent =
     totalStepCount === 0 ? 0 : Math.min(100, Math.round((completedStepCount / totalStepCount) * 100));
   const canAdjustWeight =
+    allowWeightAdjust &&
     Boolean(currentStep) &&
     state.phase !== "idle" &&
     state.phase !== "stopped" &&
@@ -194,9 +348,9 @@ function WorkoutRunner({
             })}
           </p>
         </div>
-        <button type="button" className="secondary-button" onClick={() => onSelectPlan(null)}>
+        <button type="button" className="secondary-button" onClick={onExit}>
           <TimerReset aria-hidden="true" size={17} />
-          {t("timer.choosePlan")}
+          {saveSession ? t("timer.choosePlan") : t("timer.backToTimerSetup")}
         </button>
       </div>
 
@@ -346,7 +500,64 @@ function WorkoutRunner({
         </div>
       </div>
 
-      {completedSession ? <SessionSummary session={completedSession} /> : null}
+      {completedSession && saveSession ? <SessionSummary session={completedSession} /> : null}
+      {completedSession && !saveSession ? (
+        <div className="panel p-4">
+          <p className="label">{t("common.complete")}</p>
+          <h3 className="text-xl font-bold text-slate-50">{t("timer.quickComplete")}</h3>
+          <p className="mt-1 text-sm text-slate-400">{t("timer.quickNotSaved")}</p>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function TimerHome({
+  plans,
+  onSelectPlan,
+  onStartQuickTimer,
+}: Pick<ActiveWorkoutProps, "plans" | "onSelectPlan"> & {
+  onStartQuickTimer: (plan: WorkoutPlan) => void;
+}) {
+  const { t } = useI18n();
+  const [mode, setMode] = useState<TimerMode>("quick");
+
+  return (
+    <section className="space-y-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="label">{t("nav.timer")}</p>
+          <h2 className="text-2xl font-bold text-slate-50">
+            {mode === "quick" ? t("timer.quickTimer") : t("timer.choose")}
+          </h2>
+        </div>
+        <div className="flex w-fit rounded-md border border-slate-800 bg-slate-950/70 p-1">
+          <button
+            type="button"
+            className={`rounded px-3 py-2 text-sm font-bold transition ${
+              mode === "quick" ? "bg-cyan-400 text-slate-950" : "text-slate-300 hover:bg-slate-800"
+            }`}
+            onClick={() => setMode("quick")}
+          >
+            {t("timer.quickTimer")}
+          </button>
+          <button
+            type="button"
+            className={`rounded px-3 py-2 text-sm font-bold transition ${
+              mode === "plans" ? "bg-cyan-400 text-slate-950" : "text-slate-300 hover:bg-slate-800"
+            }`}
+            onClick={() => setMode("plans")}
+          >
+            {t("timer.workoutPlans")}
+          </button>
+        </div>
+      </div>
+
+      {mode === "quick" ? (
+        <QuickTimerSetup onStart={onStartQuickTimer} />
+      ) : (
+        <PlanChooser plans={plans} onSelectPlan={onSelectPlan} />
+      )}
     </section>
   );
 }
@@ -358,15 +569,36 @@ export function ActiveWorkout({
   onSelectPlan,
   onSessionComplete,
 }: ActiveWorkoutProps) {
+  const [quickPlan, setQuickPlan] = useState<WorkoutPlan | null>(null);
+
   if (!plan) {
-    return <PlanChooser plans={plans} onSelectPlan={onSelectPlan} />;
+    if (quickPlan) {
+      return (
+        <WorkoutRunner
+          allowWeightAdjust={false}
+          plan={quickPlan}
+          saveSession={false}
+          settings={settings}
+          onExit={() => setQuickPlan(null)}
+          onSessionComplete={() => undefined}
+        />
+      );
+    }
+
+    return (
+      <TimerHome
+        plans={plans}
+        onSelectPlan={onSelectPlan}
+        onStartQuickTimer={setQuickPlan}
+      />
+    );
   }
 
   return (
     <WorkoutRunner
       plan={plan}
       settings={settings}
-      onSelectPlan={onSelectPlan}
+      onExit={() => onSelectPlan(null)}
       onSessionComplete={onSessionComplete}
     />
   );

@@ -15,12 +15,27 @@ type ServerData = {
   profile: CharacterProfile;
 };
 
+export type QuickTimerSettings = {
+  name: string;
+  workSeconds: number;
+  restSeconds: number;
+  rounds: number;
+};
+
+export const defaultQuickTimerSettings: QuickTimerSettings = {
+  name: "Quick interval",
+  workSeconds: 45,
+  restSeconds: 15,
+  rounds: 8,
+};
+
 const guestStorageKeys = {
   exercises: "workout.guest.exercises.v1",
   plans: "workout.guest.plans.v1",
   sessions: "workout.guest.sessions.v1",
   settings: "workout.guest.settings.v1",
   profile: "workout.guest.profile.v1",
+  quickTimer: "workout.guest.quickTimer.v1",
 } as const;
 
 let serverDataPromise: Promise<ServerData> | null = null;
@@ -220,4 +235,31 @@ export async function saveProfile(profile: CharacterProfile, mode: StorageMode):
   }
 
   await saveToServer("/api/profile", normalizedProfile);
+}
+
+function normalizeQuickTimerSettings(
+  settings?: Partial<QuickTimerSettings>,
+): QuickTimerSettings {
+  const positiveInteger = (value: unknown, fallback: number, minimum: number) => {
+    const parsedValue = Math.round(Number(value));
+
+    return Number.isFinite(parsedValue) ? Math.max(minimum, parsedValue) : fallback;
+  };
+
+  return {
+    name: settings?.name?.trim() || defaultQuickTimerSettings.name,
+    workSeconds: positiveInteger(settings?.workSeconds, defaultQuickTimerSettings.workSeconds, 1),
+    restSeconds: positiveInteger(settings?.restSeconds, defaultQuickTimerSettings.restSeconds, 0),
+    rounds: positiveInteger(settings?.rounds, defaultQuickTimerSettings.rounds, 1),
+  };
+}
+
+export async function getQuickTimerSettings(): Promise<QuickTimerSettings> {
+  return normalizeQuickTimerSettings(
+    readLocalJson<Partial<QuickTimerSettings>>(guestStorageKeys.quickTimer, defaultQuickTimerSettings),
+  );
+}
+
+export async function saveQuickTimerSettings(settings: QuickTimerSettings): Promise<void> {
+  writeLocalJson(guestStorageKeys.quickTimer, normalizeQuickTimerSettings(settings));
 }

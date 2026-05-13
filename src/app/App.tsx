@@ -140,7 +140,12 @@ export default function App() {
                 />
               )}
               {currentPage === "history" && (
-                <WorkoutHistory sessions={sessions} onDeleteSession={deleteSession} />
+                <WorkoutHistory
+                  exercises={exercises}
+                  sessions={sessions}
+                  onDeleteSession={deleteSession}
+                  onSaveSession={addSession}
+                />
               )}
               {currentPage === "settings" && (
                 <SettingsPage settings={settings} onSaveSettings={updateSettings} />

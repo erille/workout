@@ -598,7 +598,7 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
               alt={draft.name.trim() || t("character.unnamed")}
             />
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center justify-center gap-2">
             <div ref={avatarMenuRef} className="relative">
               <button
                 type="button"
@@ -667,24 +667,25 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
               </button>
             ) : null}
           </div>
-        </aside>
 
-        <div className="space-y-5">
-          <form className="panel space-y-4 p-4" onSubmit={saveProfile}>
+          <form
+            className="space-y-4 rounded-lg border border-slate-800 bg-slate-950/60 p-4"
+            onSubmit={saveProfile}
+          >
             <div>
               <p className="label">{t("character.profile")}</p>
               <h3 className="text-xl font-bold text-slate-50">{t("character.identity")}</h3>
             </div>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <label className="space-y-2">
-                <span className="label">{t("character.name")}</span>
-                <input
-                  className="field"
-                  value={draft.name}
-                  onChange={(event) => updateDraft({ name: event.target.value })}
-                  placeholder={t("character.namePlaceholder")}
-                />
-              </label>
+            <label className="block space-y-2">
+              <span className="label">{t("character.name")}</span>
+              <input
+                className="field"
+                value={draft.name}
+                onChange={(event) => updateDraft({ name: event.target.value })}
+                placeholder={t("character.namePlaceholder")}
+              />
+            </label>
+            <div className="grid grid-cols-2 gap-3">
               <label className="space-y-2">
                 <span className="label">{t("character.age")}</span>
                 <input
@@ -715,12 +716,14 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
                 {profileMessage}
               </div>
             ) : null}
-            <button type="submit" className="primary-button">
+            <button type="submit" className="primary-button w-full">
               <Save aria-hidden="true" size={17} />
               {t("character.saveProfile")}
             </button>
           </form>
+        </aside>
 
+        <div className="space-y-5">
           <div className="panel p-4">
             <div>
               <p className="label">{t("character.latest")}</p>

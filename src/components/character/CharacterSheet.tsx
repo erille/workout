@@ -1,5 +1,5 @@
 import { Edit3, ImageUp, LineChart, List, Save, Trash2, UserRound, X } from "lucide-react";
-import { type ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
+import { type ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../../i18n/I18nContext";
 import type {
   AvatarBodyType,
@@ -330,6 +330,7 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
   const [profileMessage, setProfileMessage] = useState<string | null>(null);
   const [measurementMessage, setMeasurementMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const measurementFormRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     setDraft(profile);
@@ -446,6 +447,10 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
     setMeasurementDraft(createMeasurementDraftFromMeasurement(measurement));
     setMeasurementMessage(null);
     setError(null);
+    requestAnimationFrame(() => {
+      measurementFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      measurementFormRef.current?.focus({ preventScroll: true });
+    });
   };
 
   const cancelMeasurementEdit = () => {
@@ -657,7 +662,12 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
             </div>
           </div>
 
-          <form className="panel space-y-4 p-4" onSubmit={saveMeasurement}>
+          <form
+            ref={measurementFormRef}
+            className="panel scroll-mt-4 space-y-4 p-4 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-offset-2 focus:ring-offset-slate-950"
+            tabIndex={-1}
+            onSubmit={saveMeasurement}
+          >
             <div>
               <p className="label">{t("character.progress")}</p>
               <h3 className="text-xl font-bold text-slate-50">

@@ -1,5 +1,6 @@
 import { defaultExercises } from "./defaultExercises";
 import type { Exercise } from "../models/exercise";
+import { defaultProfile, type CharacterProfile } from "../models/profile";
 import { defaultSettings, type AppSettings } from "../models/settings";
 import type { WorkoutSession } from "../models/session";
 import type { WorkoutPlan } from "../models/workout";
@@ -11,6 +12,7 @@ type ServerData = {
   plans: WorkoutPlan[];
   sessions: WorkoutSession[];
   settings: AppSettings;
+  profile: CharacterProfile;
 };
 
 const guestStorageKeys = {
@@ -18,6 +20,7 @@ const guestStorageKeys = {
   plans: "workout.guest.plans.v1",
   sessions: "workout.guest.sessions.v1",
   settings: "workout.guest.settings.v1",
+  profile: "workout.guest.profile.v1",
 } as const;
 
 let serverDataPromise: Promise<ServerData> | null = null;
@@ -75,6 +78,7 @@ async function loadServerData(): Promise<ServerData> {
       ...defaultSettings,
       ...apiData.settings,
     },
+    profile: normalizeProfile(apiData.profile),
   };
 }
 
@@ -92,6 +96,7 @@ async function readServerData(): Promise<ServerData> {
       plans: [],
       sessions: [],
       settings: defaultSettings,
+      profile: defaultProfile,
     };
   }
 }
@@ -113,6 +118,18 @@ function getLocalExercises(): Exercise[] {
 
   writeLocalJson(guestStorageKeys.exercises, defaultExercises);
   return defaultExercises;
+}
+
+function normalizeProfile(profile?: Partial<CharacterProfile>): CharacterProfile {
+  return {
+    ...defaultProfile,
+    ...profile,
+    avatar: {
+      ...defaultProfile.avatar,
+      ...profile?.avatar,
+    },
+    measurements: Array.isArray(profile?.measurements) ? profile.measurements : [],
+  };
 }
 
 export async function getExercises(mode: StorageMode): Promise<Exercise[]> {
@@ -184,4 +201,23 @@ export async function saveSettings(settings: AppSettings, mode: StorageMode): Pr
   }
 
   await saveToServer("/api/settings", settings);
+}
+
+export async function getProfile(mode: StorageMode): Promise<CharacterProfile> {
+  if (mode === "local") {
+    return normalizeProfile(readLocalJson<Partial<CharacterProfile>>(guestStorageKeys.profile, {}));
+  }
+
+  return (await readServerData()).profile;
+}
+
+export async function saveProfile(profile: CharacterProfile, mode: StorageMode): Promise<void> {
+  const normalizedProfile = normalizeProfile(profile);
+
+  if (mode === "local") {
+    writeLocalJson(guestStorageKeys.profile, normalizedProfile);
+    return;
+  }
+
+  await saveToServer("/api/profile", normalizedProfile);
 }

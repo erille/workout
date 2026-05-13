@@ -9,6 +9,7 @@ import {
   LogOut,
   Settings,
   Timer,
+  UserRound,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { Language } from "../../i18n/translations";
@@ -16,7 +17,7 @@ import type { TranslationKey } from "../../i18n/translations";
 import { useI18n } from "../../i18n/I18nContext";
 import type { StorageMode } from "../../data/storage";
 
-export type PageId = "exercises" | "builder" | "timer" | "history" | "settings";
+export type PageId = "exercises" | "builder" | "timer" | "history" | "character" | "settings";
 
 type NavigationProps = {
   authEnabled: boolean;
@@ -35,6 +36,7 @@ const navItems = [
   { id: "builder", labelKey: "nav.builder", icon: ListChecks },
   { id: "timer", labelKey: "nav.timer", icon: Timer },
   { id: "history", labelKey: "nav.history", icon: History },
+  { id: "character", labelKey: "nav.character", icon: UserRound },
   { id: "settings", labelKey: "nav.settings", icon: Settings },
 ] satisfies Array<{ id: PageId; labelKey: TranslationKey; icon: typeof Dumbbell }>;
 

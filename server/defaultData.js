@@ -123,3 +123,18 @@ export const defaultSettings = {
   language: "en",
   theme: "dark",
 };
+
+export const defaultProfile = {
+  name: "",
+  avatar: {
+    skinColor: "#d7a06f",
+    hairColor: "#3b2417",
+    eyeColor: "#22d3ee",
+    shirtColor: "#0891b2",
+    pantsColor: "#334155",
+    headShape: "square",
+    bodyType: "regular",
+  },
+  measurements: [],
+  updatedAt: timestamp,
+};

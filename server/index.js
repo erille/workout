@@ -4,7 +4,7 @@ import { createServer } from "node:http";
 import { dirname, extname, join, resolve, sep } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import argon2 from "argon2";
-import { defaultExercises, defaultSettings } from "./defaultData.js";
+import { defaultExercises, defaultProfile, defaultSettings } from "./defaultData.js";
 
 function loadDotEnv() {
   const envPath = resolve(".env");
@@ -73,6 +73,11 @@ db.exec(`
     updated_at TEXT NOT NULL
   );
   CREATE TABLE IF NOT EXISTS settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    data TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS profile (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     data TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -300,6 +305,39 @@ function writeSettings(settings) {
   ).run(JSON.stringify({ ...defaultSettings, ...settings }), new Date().toISOString());
 }
 
+function normalizeProfile(profile) {
+  return {
+    ...defaultProfile,
+    ...(profile && typeof profile === "object" && !Array.isArray(profile) ? profile : {}),
+    avatar: {
+      ...defaultProfile.avatar,
+      ...(profile?.avatar && typeof profile.avatar === "object" && !Array.isArray(profile.avatar)
+        ? profile.avatar
+        : {}),
+    },
+    measurements: Array.isArray(profile?.measurements) ? profile.measurements : [],
+  };
+}
+
+function readProfile() {
+  const row = db.prepare("SELECT data FROM profile WHERE id = 1").get();
+
+  return normalizeProfile(row ? JSON.parse(row.data) : defaultProfile);
+}
+
+function writeProfile(profile) {
+  if (!profile || typeof profile !== "object" || Array.isArray(profile)) {
+    throw new Error("Profile payload must be an object.");
+  }
+
+  const normalizedProfile = normalizeProfile(profile);
+  db.prepare(
+    `INSERT INTO profile (id, data, updated_at)
+     VALUES (1, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
+  ).run(JSON.stringify(normalizedProfile), normalizedProfile.updatedAt ?? new Date().toISOString());
+}
+
 function seedDefaults() {
   const exerciseCount = db.prepare("SELECT COUNT(*) AS count FROM exercises").get().count;
 
@@ -312,6 +350,12 @@ function seedDefaults() {
   if (settingsCount === 0) {
     writeSettings(defaultSettings);
   }
+
+  const profileCount = db.prepare("SELECT COUNT(*) AS count FROM profile").get().count;
+
+  if (profileCount === 0) {
+    writeProfile(defaultProfile);
+  }
 }
 
 function readAllData() {
@@ -322,6 +366,7 @@ function readAllData() {
     plans: readCollection("plans"),
     sessions: readCollection("sessions"),
     settings: readSettings(),
+    profile: readProfile(),
   };
 }
 
@@ -330,6 +375,7 @@ function writeAllData(data) {
   writeCollection("plans", data.plans ?? []);
   writeCollection("sessions", data.sessions ?? []);
   writeSettings(data.settings ?? defaultSettings);
+  writeProfile(data.profile ?? defaultProfile);
 }
 
 async function handleApi(request, response, pathname) {
@@ -374,6 +420,12 @@ async function handleApi(request, response, pathname) {
   if (request.method === "PUT" && pathname === "/api/settings") {
     writeSettings(await readBody(request));
     jsonResponse(response, 200, readSettings());
+    return;
+  }
+
+  if (request.method === "PUT" && pathname === "/api/profile") {
+    writeProfile(await readBody(request));
+    jsonResponse(response, 200, readProfile());
     return;
   }
 

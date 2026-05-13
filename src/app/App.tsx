@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { LoginPage } from "../components/auth/LoginPage";
+import { CharacterSheet } from "../components/character/CharacterSheet";
 import { ExerciseLibrary } from "../components/exercises/ExerciseLibrary";
 import { WorkoutHistory } from "../components/history/WorkoutHistory";
 import { Navigation, type PageId } from "../components/layout/Navigation";
@@ -9,6 +10,7 @@ import { WorkoutBuilder } from "../components/workout-builder/WorkoutBuilder";
 import { useExercises } from "../hooks/useExercises";
 import { useAuth } from "../hooks/useAuth";
 import { useSessions } from "../hooks/useSessions";
+import { useProfile } from "../hooks/useProfile";
 import { useSettings } from "../hooks/useSettings";
 import { useWorkoutPlans } from "../hooks/useWorkoutPlans";
 import { I18nProvider, translate } from "../i18n/I18nContext";
@@ -36,13 +38,23 @@ export default function App() {
     storageMode,
     canLoadData,
   );
+  const { profile, isLoading: profileLoading, updateProfile } = useProfile(
+    storageMode,
+    canLoadData,
+  );
   const { settings, isLoading: settingsLoading, updateSettings } = useSettings(
     storageMode,
     canLoadData,
   );
 
   const language = settings.language;
-  const isLoading = authLoading || exercisesLoading || plansLoading || sessionsLoading || settingsLoading;
+  const isLoading =
+    authLoading ||
+    exercisesLoading ||
+    plansLoading ||
+    sessionsLoading ||
+    profileLoading ||
+    settingsLoading;
   const t = (key: Parameters<typeof translate>[1], values?: Parameters<typeof translate>[2]) =>
     translate(language, key, values);
 
@@ -146,6 +158,9 @@ export default function App() {
                   onDeleteSession={deleteSession}
                   onSaveSession={addSession}
                 />
+              )}
+              {currentPage === "character" && (
+                <CharacterSheet profile={profile} onSaveProfile={updateProfile} />
               )}
               {currentPage === "settings" && (
                 <SettingsPage settings={settings} onSaveSettings={updateSettings} />

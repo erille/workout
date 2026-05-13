@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { defaultExercises, defaultSettings } from "./defaultData.js";
+import { defaultExercises, defaultProfile, defaultSettings } from "./defaultData.js";
 
 function loadDotEnv() {
   const envPath = resolve(".env");
@@ -71,6 +71,11 @@ function schema() {
       updated_at TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS settings (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      data TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS profile (
       id INTEGER PRIMARY KEY CHECK (id = 1),
       data TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -189,6 +194,10 @@ try {
 
   db.prepare("INSERT OR IGNORE INTO settings (id, data, updated_at) VALUES (1, ?, ?)").run(
     JSON.stringify(defaultSettings),
+    now,
+  );
+  db.prepare("INSERT OR IGNORE INTO profile (id, data, updated_at) VALUES (1, ?, ?)").run(
+    JSON.stringify(defaultProfile),
     now,
   );
 

@@ -16,7 +16,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Plus, Play, Save, Trash2 } from "lucide-react";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useI18n } from "../../i18n/I18nContext";
 import { translateExerciseName } from "../../i18n/exerciseNames";
 import type { Exercise } from "../../models/exercise";
@@ -63,7 +63,11 @@ function clonePlanToDraft(plan: WorkoutPlan): DraftPlan {
   };
 }
 
-function createStepFromExercise(exercise: Exercise, defaults: StepDefaults): WorkoutStep {
+function createStepFromExercise(
+  exercise: Exercise,
+  type: WorkoutStep["type"],
+  defaults: StepDefaults,
+): WorkoutStep {
   const common = {
     id: createId("step"),
     exerciseId: exercise.id,
@@ -72,7 +76,7 @@ function createStepFromExercise(exercise: Exercise, defaults: StepDefaults): Wor
     weight: defaults.weight,
   };
 
-  if (exercise.defaultMode === "time") {
+  if (type === "time") {
     return {
       ...common,
       type: "time",
@@ -80,7 +84,7 @@ function createStepFromExercise(exercise: Exercise, defaults: StepDefaults): Wor
     };
   }
 
-  if (exercise.defaultMode === "distance") {
+  if (type === "distance") {
     return {
       ...common,
       type: "distance",
@@ -327,6 +331,9 @@ export function WorkoutBuilder({
     breakSeconds: 15,
   });
   const [selectedExerciseId, setSelectedExerciseId] = useState(exercises[0]?.id ?? "");
+  const [selectedStepType, setSelectedStepType] = useState<WorkoutStep["type"]>(
+    exercises[0]?.defaultMode ?? "reps",
+  );
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -353,6 +360,19 @@ export function WorkoutBuilder({
 
   const selectedExercise = exercises.find((exercise) => exercise.id === selectedExerciseId);
 
+  useEffect(() => {
+    if (exercises.length === 0) {
+      return;
+    }
+
+    const selectedExerciseExists = exercises.some((exercise) => exercise.id === selectedExerciseId);
+
+    if (!selectedExerciseExists) {
+      setSelectedExerciseId(exercises[0].id);
+      setSelectedStepType(exercises[0].defaultMode);
+    }
+  }, [exercises, selectedExerciseId]);
+
   const updateDraftSteps = (update: (steps: WorkoutStep[]) => WorkoutStep[]) => {
     setDraft((current) => ({ ...current, steps: update(current.steps) }));
   };
@@ -362,7 +382,10 @@ export function WorkoutBuilder({
       return;
     }
 
-    updateDraftSteps((steps) => [...steps, createStepFromExercise(selectedExercise, defaults)]);
+    updateDraftSteps((steps) => [
+      ...steps,
+      createStepFromExercise(selectedExercise, selectedStepType, defaults),
+    ]);
     setMessage(t("builder.added", { name: translateExerciseName(selectedExercise, language) }));
   };
 
@@ -609,13 +632,20 @@ export function WorkoutBuilder({
             </label>
           </div>
 
-          <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_8rem_8rem_8rem_8rem_9rem_auto] lg:items-end">
+          <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_9rem_8rem_9rem_8rem_auto] lg:items-end">
             <label className="space-y-2">
               <span className="label">{t("builder.exercise")}</span>
               <select
                 className="field"
                 value={selectedExerciseId}
-                onChange={(event) => setSelectedExerciseId(event.target.value)}
+                onChange={(event) => {
+                  const nextExercise = exercises.find((exercise) => exercise.id === event.target.value);
+                  setSelectedExerciseId(event.target.value);
+
+                  if (nextExercise) {
+                    setSelectedStepType(nextExercise.defaultMode);
+                  }
+                }}
               >
                 {exercises.map((exercise) => (
                   <option key={exercise.id} value={exercise.id}>
@@ -625,46 +655,81 @@ export function WorkoutBuilder({
               </select>
             </label>
             <label className="space-y-2">
-              <span className="label">{t("common.time")}</span>
-              <input
+              <span className="label">{t("builder.type")}</span>
+              <select
                 className="field"
-                min={1}
-                type="number"
-                value={defaults.durationSeconds}
-                onChange={(event) =>
-                  setDefaults((current) => ({
-                    ...current,
-                    durationSeconds: Math.max(1, Math.round(Number(event.target.value))),
-                  }))
-                }
-              />
+                value={selectedStepType}
+                onChange={(event) => setSelectedStepType(event.target.value as WorkoutStep["type"])}
+              >
+                <option value="time">{t("common.time")}</option>
+                <option value="reps">{t("common.reps")}</option>
+                <option value="distance">{t("common.distance")}</option>
+              </select>
             </label>
+
+            {selectedStepType === "time" ? (
+              <label className="space-y-2">
+                <span className="label">{t("common.time")}</span>
+                <input
+                  className="field"
+                  min={1}
+                  type="number"
+                  value={defaults.durationSeconds}
+                  onChange={(event) =>
+                    setDefaults((current) => ({
+                      ...current,
+                      durationSeconds: Math.max(1, Math.round(Number(event.target.value))),
+                    }))
+                  }
+                />
+              </label>
+            ) : selectedStepType === "distance" ? (
+              <label className="space-y-2">
+                <span className="label">{t("common.meters")}</span>
+                <input
+                  className="field"
+                  min={1}
+                  type="number"
+                  value={defaults.distanceMeters}
+                  onChange={(event) =>
+                    setDefaults((current) => ({
+                      ...current,
+                      distanceMeters: Math.max(1, Math.round(Number(event.target.value))),
+                    }))
+                  }
+                />
+              </label>
+            ) : (
+              <label className="space-y-2">
+                <span className="label">{t("common.reps")}</span>
+                <input
+                  className="field"
+                  min={1}
+                  type="number"
+                  value={defaults.reps}
+                  onChange={(event) =>
+                    setDefaults((current) => ({
+                      ...current,
+                      reps: Math.max(1, Math.round(Number(event.target.value))),
+                    }))
+                  }
+                />
+              </label>
+            )}
+
             <label className="space-y-2">
-              <span className="label">{t("common.reps")}</span>
+              <span className="label">{t("builder.weightKg")}</span>
               <input
                 className="field"
-                min={1}
+                min={0}
+                step={0.5}
+                placeholder={t("common.optional")}
                 type="number"
-                value={defaults.reps}
+                value={defaults.weight ?? ""}
                 onChange={(event) =>
                   setDefaults((current) => ({
                     ...current,
-                    reps: Math.max(1, Math.round(Number(event.target.value))),
-                  }))
-                }
-              />
-            </label>
-            <label className="space-y-2">
-              <span className="label">{t("common.meters")}</span>
-              <input
-                className="field"
-                min={1}
-                type="number"
-                value={defaults.distanceMeters}
-                onChange={(event) =>
-                  setDefaults((current) => ({
-                    ...current,
-                    distanceMeters: Math.max(1, Math.round(Number(event.target.value))),
+                    weight: parseOptionalWeight(event.target.value),
                   }))
                 }
               />
@@ -680,23 +745,6 @@ export function WorkoutBuilder({
                   setDefaults((current) => ({
                     ...current,
                     breakSeconds: Math.max(0, Math.round(Number(event.target.value))),
-                  }))
-                }
-              />
-            </label>
-            <label className="space-y-2">
-              <span className="label">{t("builder.weightKg")}</span>
-              <input
-                className="field"
-                min={0}
-                step={0.5}
-                placeholder={t("common.optional")}
-                type="number"
-                value={defaults.weight ?? ""}
-                onChange={(event) =>
-                  setDefaults((current) => ({
-                    ...current,
-                    weight: parseOptionalWeight(event.target.value),
                   }))
                 }
               />

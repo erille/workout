@@ -61,19 +61,19 @@ type GraphTooltip = GraphPoint & {
 };
 
 const swatches = [
-  "#f2c09a",
-  "#d7a06f",
-  "#8d5524",
-  "#3b2417",
-  "#22d3ee",
-  "#0891b2",
-  "#16a34a",
-  "#f97316",
-  "#e11d48",
-  "#334155",
-  "#f8fafc",
-  "#111827",
-];
+  { value: "#f2c09a", labelKey: "color.lightPeach" },
+  { value: "#d7a06f", labelKey: "color.warmTan" },
+  { value: "#8d5524", labelKey: "color.brown" },
+  { value: "#3b2417", labelKey: "color.darkBrown" },
+  { value: "#22d3ee", labelKey: "color.cyan" },
+  { value: "#0891b2", labelKey: "color.teal" },
+  { value: "#16a34a", labelKey: "color.green" },
+  { value: "#f97316", labelKey: "color.orange" },
+  { value: "#e11d48", labelKey: "color.crimson" },
+  { value: "#334155", labelKey: "color.slate" },
+  { value: "#f8fafc", labelKey: "color.white" },
+  { value: "#111827", labelKey: "color.black" },
+] as const;
 
 const metricDefinitions = [
   { key: "weightKg", labelKey: "character.weightKg", suffix: " kg", color: "#22d3ee" },
@@ -633,27 +633,39 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
               <label key={key} className="space-y-2">
                 <span className="label">{label}</span>
                 <div className="flex items-center gap-2">
+                  {(() => {
+                    const colorValue = draft.avatar[key as keyof AvatarSettings] as string;
+                    const isKnownSwatch = swatches.some((swatch) => swatch.value === colorValue);
+
+                    return (
+                      <>
                   <input
                     className="h-10 w-12 rounded-md border border-slate-700 bg-slate-950"
                     type="color"
-                    value={draft.avatar[key as keyof AvatarSettings] as string}
+                    value={colorValue}
                     onChange={(event) =>
                       updateAvatar({ [key]: event.target.value } as Partial<AvatarSettings>)
                     }
                   />
                   <select
                     className="field"
-                    value={draft.avatar[key as keyof AvatarSettings] as string}
+                    value={colorValue}
                     onChange={(event) =>
                       updateAvatar({ [key]: event.target.value } as Partial<AvatarSettings>)
                     }
                   >
-                    {swatches.map((color) => (
-                      <option key={color} value={color}>
-                        {color}
+                    {!isKnownSwatch ? (
+                      <option value={colorValue}>{t("color.custom")}</option>
+                    ) : null}
+                    {swatches.map((swatch) => (
+                      <option key={swatch.value} value={swatch.value}>
+                        {t(swatch.labelKey)}
                       </option>
                     ))}
                   </select>
+                      </>
+                    );
+                  })()}
                 </div>
               </label>
             ))}

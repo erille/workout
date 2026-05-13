@@ -1,5 +1,13 @@
 import { Edit3, ImageUp, LineChart, List, Save, Trash2, UserRound, X } from "lucide-react";
-import { type ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ChangeEvent,
+  type FormEvent,
+  type MouseEvent as ReactMouseEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useI18n } from "../../i18n/I18nContext";
 import type {
   AvatarBodyType,
@@ -39,6 +47,18 @@ type MeasurementMetricKey =
   | "hipCm";
 
 type TimelineView = "history" | "graph";
+
+type GraphPoint = {
+  dateLabel: string;
+  valueLabel: string;
+  x: number;
+  y: number;
+};
+
+type GraphTooltip = GraphPoint & {
+  color: string;
+  metricLabel: string;
+};
 
 const swatches = [
   "#f2c09a",
@@ -141,9 +161,12 @@ function MeasurementGraph({
   noDataLabel: string;
   metricLabels: Record<MeasurementMetricKey, string>;
 }) {
+  const [tooltip, setTooltip] = useState<GraphTooltip | null>(null);
   const width = 720;
   const height = 300;
   const padding = 34;
+  const tooltipWidth = 178;
+  const tooltipHeight = 62;
   const datedMeasurements = measurements.filter((measurement) => measurementTime(measurement) > 0);
   const times = datedMeasurements.map(measurementTime);
   const minTime = Math.min(...times);
@@ -168,6 +191,10 @@ function MeasurementGraph({
       const maxValue = Math.max(...values.map((point) => point.value));
       const valueRange = maxValue - minValue || 1;
       const points = values.map((point) => ({
+        dateLabel: new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
+          new Date(point.time),
+        ),
+        valueLabel: formatMetric(point.value, definition.suffix),
         x: padding + ((point.time - minTime) / timeRange) * usableWidth,
         y: padding + usableHeight - ((point.value - minValue) / valueRange) * usableHeight,
       }));
@@ -181,6 +208,33 @@ function MeasurementGraph({
     })
     .filter((item): item is NonNullable<typeof item> => item !== null);
 
+  const showTooltip = (
+    event: ReactMouseEvent<SVGElement>,
+    line: (typeof series)[number],
+    point?: GraphPoint,
+  ) => {
+    const svg = event.currentTarget.ownerSVGElement;
+
+    if (!svg) {
+      return;
+    }
+
+    const rect = svg.getBoundingClientRect();
+    const viewBox = svg.viewBox.baseVal;
+    const cursorX = ((event.clientX - rect.left) / rect.width) * viewBox.width + viewBox.x;
+    const nearestPoint =
+      point ??
+      line.points.reduce((closest, current) =>
+        Math.abs(current.x - cursorX) < Math.abs(closest.x - cursorX) ? current : closest,
+      );
+
+    setTooltip({
+      ...nearestPoint,
+      color: line.color,
+      metricLabel: line.label,
+    });
+  };
+
   if (series.length === 0) {
     return (
       <p className="rounded-md border border-dashed border-slate-700 p-3 text-sm text-slate-400">
@@ -189,10 +243,22 @@ function MeasurementGraph({
     );
   }
 
+  const tooltipPosition = tooltip
+    ? {
+        x: Math.min(Math.max(tooltip.x + 12, 8), width - tooltipWidth - 8),
+        y: Math.min(Math.max(tooltip.y - tooltipHeight - 10, 8), height - tooltipHeight - 8),
+      }
+    : null;
+
   return (
     <div className="space-y-3">
       <div className="overflow-x-auto rounded-md border border-slate-800 bg-slate-950/70 p-3">
-        <svg className="min-w-[42rem]" viewBox={`0 0 ${width} ${height}`} role="img">
+        <svg
+          className="min-w-[42rem]"
+          viewBox={`0 0 ${width} ${height}`}
+          role="img"
+          onMouseLeave={() => setTooltip(null)}
+        >
           <line
             x1={padding}
             x2={padding}
@@ -223,26 +289,66 @@ function MeasurementGraph({
           {series.map((line) => (
             <g key={line.key}>
               {line.points.length > 1 ? (
-                <polyline
-                  fill="none"
-                  points={line.points.map((point) => `${point.x},${point.y}`).join(" ")}
-                  stroke={line.color}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="3"
-                />
+                <>
+                  <polyline
+                    fill="none"
+                    points={line.points.map((point) => `${point.x},${point.y}`).join(" ")}
+                    stroke={line.color}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="3"
+                  />
+                  <polyline
+                    fill="none"
+                    points={line.points.map((point) => `${point.x},${point.y}`).join(" ")}
+                    pointerEvents="stroke"
+                    stroke="transparent"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="18"
+                    onMouseMove={(event) => showTooltip(event, line)}
+                  />
+                </>
               ) : null}
               {line.points.map((point, index) => (
-                <circle
-                  key={`${line.key}-${index}`}
-                  cx={point.x}
-                  cy={point.y}
-                  fill={line.color}
-                  r="4"
-                />
+                <g key={`${line.key}-${index}`}>
+                  <circle
+                    cx={point.x}
+                    cy={point.y}
+                    fill="transparent"
+                    pointerEvents="all"
+                    r="10"
+                    onMouseMove={(event) => showTooltip(event, line, point)}
+                  />
+                  <circle cx={point.x} cy={point.y} fill={line.color} pointerEvents="none" r="4" />
+                </g>
               ))}
             </g>
           ))}
+          {tooltip && tooltipPosition ? (
+            <g
+              pointerEvents="none"
+              transform={`translate(${tooltipPosition.x}, ${tooltipPosition.y})`}
+            >
+              <rect
+                width={tooltipWidth}
+                height={tooltipHeight}
+                rx="6"
+                fill="#020617"
+                stroke={tooltip.color}
+                strokeWidth="1.5"
+              />
+              <text x="12" y="20" fill={tooltip.color} fontSize="12" fontWeight="700">
+                {tooltip.metricLabel}
+              </text>
+              <text x="12" y="39" fill="#f8fafc" fontSize="16" fontWeight="800">
+                {tooltip.valueLabel}
+              </text>
+              <text x="12" y="54" fill="#94a3b8" fontSize="11" fontWeight="600">
+                {tooltip.dateLabel}
+              </text>
+            </g>
+          ) : null}
         </svg>
       </div>
       <div className="flex flex-wrap gap-2">

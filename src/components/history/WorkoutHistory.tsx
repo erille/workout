@@ -1,4 +1,4 @@
-import { CalendarPlus, Plus, Save, Search, Trash2, X } from "lucide-react";
+import { CalendarPlus, Edit3, Plus, Save, Search, Trash2, X } from "lucide-react";
 import { FormEvent, useMemo, useState } from "react";
 import { useI18n } from "../../i18n/I18nContext";
 import { translateExerciseName } from "../../i18n/exerciseNames";
@@ -44,6 +44,19 @@ function createManualStep(): ManualStepForm {
   };
 }
 
+function createManualStepFromSessionStep(step: WorkoutSessionStep): ManualStepForm {
+  return {
+    id: step.id,
+    exerciseName: step.exerciseName,
+    type: step.type,
+    durationSeconds: step.durationSeconds ?? 60,
+    reps: step.reps ?? 10,
+    round: step.round,
+    breakSeconds: step.breakSeconds,
+    weight: typeof step.weight === "number" ? String(step.weight) : "",
+  };
+}
+
 function toDateTimeInputValue(date: Date): string {
   const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
   return localDate.toISOString().slice(0, 16);
@@ -60,6 +73,11 @@ function parseLocalDateTime(value: string): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+function getSessionDurationMinutes(session: WorkoutSession): number {
+  const elapsedSeconds = getElapsedSeconds(session.startedAt, session.completedAt);
+  return elapsedSeconds > 0 ? Math.max(1, Math.round(elapsedSeconds / 60)) : 60;
+}
+
 export function WorkoutHistory({
   exercises,
   onDeleteSession,
@@ -69,6 +87,7 @@ export function WorkoutHistory({
   const { language, t } = useI18n();
   const [query, setQuery] = useState("");
   const [isManualOpen, setIsManualOpen] = useState(false);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [manualWorkoutName, setManualWorkoutName] = useState(t("history.manualDefaultName"));
   const [manualStartedAt, setManualStartedAt] = useState(() => toDateTimeInputValue(new Date()));
   const [manualDurationMinutes, setManualDurationMinutes] = useState(60);
@@ -102,11 +121,25 @@ export function WorkoutHistory({
   }, [language, query, sessions]);
 
   const resetManualForm = () => {
+    setEditingSessionId(null);
     setManualWorkoutName(t("history.manualDefaultName"));
     setManualStartedAt(toDateTimeInputValue(new Date()));
     setManualDurationMinutes(60);
     setManualSteps([createManualStep()]);
     setManualError(null);
+  };
+
+  const editSession = (session: WorkoutSession) => {
+    setEditingSessionId(session.id);
+    setManualWorkoutName(session.workoutName);
+    setManualStartedAt(toDateTimeInputValue(new Date(session.startedAt)));
+    setManualDurationMinutes(getSessionDurationMinutes(session));
+    setManualSteps(
+      session.steps.length > 0 ? session.steps.map(createManualStepFromSessionStep) : [createManualStep()],
+    );
+    setManualError(null);
+    setManualMessage(null);
+    setIsManualOpen(true);
   };
 
   const updateManualStep = (stepId: string, update: Partial<ManualStepForm>) => {
@@ -202,8 +235,12 @@ export function WorkoutHistory({
 
     const completedAt = new Date(startedAt.getTime() + durationMinutes * 60_000);
     const roundsCompleted = steps.reduce((maxRound, step) => Math.max(maxRound, step.round), 1);
+    const existingSession = editingSessionId
+      ? sessions.find((sessionItem) => sessionItem.id === editingSessionId)
+      : undefined;
     const session: WorkoutSession = {
-      id: createId("session"),
+      id: existingSession?.id ?? createId("session"),
+      workoutPlanId: existingSession?.workoutPlanId,
       workoutName,
       startedAt: startedAt.toISOString(),
       completedAt: completedAt.toISOString(),
@@ -217,7 +254,9 @@ export function WorkoutHistory({
     try {
       await onSaveSession(session);
       resetManualForm();
-      setManualMessage(t("history.manualSaved"));
+      setManualMessage(
+        editingSessionId ? t("history.editSaved") : t("history.manualSaved"),
+      );
     } catch {
       setManualError(t("history.manualErrorSave"));
     } finally {
@@ -237,7 +276,13 @@ export function WorkoutHistory({
             type="button"
             className={isManualOpen ? "secondary-button" : "primary-button"}
             onClick={() => {
-              setIsManualOpen((current) => !current);
+              setIsManualOpen((current) => {
+                const nextIsOpen = !current;
+                if (nextIsOpen) {
+                  resetManualForm();
+                }
+                return nextIsOpen;
+              });
               setManualError(null);
               setManualMessage(null);
             }}
@@ -267,7 +312,9 @@ export function WorkoutHistory({
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <p className="label">{t("history.manualSection")}</p>
-              <h3 className="text-xl font-bold text-slate-50">{t("history.manualTitle")}</h3>
+              <h3 className="text-xl font-bold text-slate-50">
+                {editingSessionId ? t("history.editTitle") : t("history.manualTitle")}
+              </h3>
             </div>
             <button
               type="button"
@@ -469,7 +516,7 @@ export function WorkoutHistory({
           <div className="flex flex-col gap-2 sm:flex-row">
             <button type="submit" className="primary-button" disabled={isSavingManual}>
               <Save aria-hidden="true" size={17} />
-              {t("history.manualSave")}
+              {editingSessionId ? t("history.editSave") : t("history.manualSave")}
             </button>
             <button type="button" className="secondary-button" onClick={resetManualForm}>
               {t("common.cancel")}
@@ -499,18 +546,28 @@ export function WorkoutHistory({
                     })}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  className="danger-button w-fit"
-                  onClick={() => {
-                    if (window.confirm(t("history.deleteConfirm", { name: session.workoutName }))) {
-                      void onDeleteSession(session.id);
-                    }
-                  }}
-                >
-                  <Trash2 aria-hidden="true" size={17} />
-                  {t("common.delete")}
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="secondary-button w-fit"
+                    onClick={() => editSession(session)}
+                  >
+                    <Edit3 aria-hidden="true" size={17} />
+                    {t("common.edit")}
+                  </button>
+                  <button
+                    type="button"
+                    className="danger-button w-fit"
+                    onClick={() => {
+                      if (window.confirm(t("history.deleteConfirm", { name: session.workoutName }))) {
+                        void onDeleteSession(session.id);
+                      }
+                    }}
+                  >
+                    <Trash2 aria-hidden="true" size={17} />
+                    {t("common.delete")}
+                  </button>
+                </div>
               </div>
 
               <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">

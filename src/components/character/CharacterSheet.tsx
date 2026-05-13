@@ -19,24 +19,24 @@ type MeasurementDraft = {
   measuredAt: string;
   weightKg: string;
   muscleMassKg: string;
+  bodyFatPercent: string;
   waistCm: string;
   chestCm: string;
   bicepsCm: string;
   thighCm: string;
   hipCm: string;
-  bodyFatPercent: string;
   notes: string;
 };
 
 type MeasurementMetricKey =
   | "weightKg"
   | "muscleMassKg"
+  | "bodyFatPercent"
   | "waistCm"
   | "chestCm"
   | "bicepsCm"
   | "thighCm"
-  | "hipCm"
-  | "bodyFatPercent";
+  | "hipCm";
 
 type TimelineView = "history" | "graph";
 
@@ -58,12 +58,12 @@ const swatches = [
 const metricDefinitions = [
   { key: "weightKg", labelKey: "character.weightKg", suffix: " kg", color: "#22d3ee" },
   { key: "muscleMassKg", labelKey: "character.muscleMassKg", suffix: " kg", color: "#34d399" },
+  { key: "bodyFatPercent", labelKey: "character.bodyFatPercent", suffix: "%", color: "#f97316" },
   { key: "waistCm", labelKey: "character.waistCm", suffix: " cm", color: "#f59e0b" },
   { key: "chestCm", labelKey: "character.chestCm", suffix: " cm", color: "#f472b6" },
   { key: "bicepsCm", labelKey: "character.bicepsCm", suffix: " cm", color: "#a78bfa" },
   { key: "thighCm", labelKey: "character.thighCm", suffix: " cm", color: "#fb7185" },
   { key: "hipCm", labelKey: "character.hipCm", suffix: " cm", color: "#60a5fa" },
-  { key: "bodyFatPercent", labelKey: "character.bodyFatPercent", suffix: "%", color: "#f97316" },
 ] as const;
 
 function todayInputValue(): string {
@@ -97,12 +97,12 @@ function createEmptyMeasurementDraft(): MeasurementDraft {
     measuredAt: todayInputValue(),
     weightKg: "",
     muscleMassKg: "",
+    bodyFatPercent: "",
     waistCm: "",
     chestCm: "",
     bicepsCm: "",
     thighCm: "",
     hipCm: "",
-    bodyFatPercent: "",
     notes: "",
   };
 }
@@ -116,12 +116,12 @@ function createMeasurementDraftFromMeasurement(measurement: BodyMeasurement): Me
     measuredAt: dateInputValue(measurement.measuredAt),
     weightKg: stringifyMeasurementValue(measurement.weightKg),
     muscleMassKg: stringifyMeasurementValue(measurement.muscleMassKg),
+    bodyFatPercent: stringifyMeasurementValue(measurement.bodyFatPercent),
     waistCm: stringifyMeasurementValue(measurement.waistCm),
     chestCm: stringifyMeasurementValue(measurement.chestCm),
     bicepsCm: stringifyMeasurementValue(measurement.bicepsCm),
     thighCm: stringifyMeasurementValue(measurement.thighCm),
     hipCm: stringifyMeasurementValue(measurement.hipCm),
-    bodyFatPercent: stringifyMeasurementValue(measurement.bodyFatPercent),
     notes: measurement.notes ?? "",
   };
 }
@@ -787,48 +787,50 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
                     key={measurement.id}
                     className="rounded-md border border-slate-800 bg-slate-950/70 p-3"
                   >
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div>
+                    <div className="space-y-3">
+                      <div className="flex items-start justify-between gap-3">
                         <p className="font-bold text-slate-50">
                           {new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
                             new Date(measurement.measuredAt),
                           )}
                         </p>
-                        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                          {metricDefinitions.map((definition) => (
-                            <div
-                              key={definition.key}
-                              className="rounded-md border border-slate-800 bg-slate-900/60 p-2"
-                            >
-                              <p className="label">{t(definition.labelKey)}</p>
-                              <p className="mt-1 text-sm font-bold text-slate-100">
-                                {formatMetric(measurement[definition.key], definition.suffix)}
-                              </p>
-                            </div>
-                          ))}
+                        <div className="flex shrink-0 items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            className="secondary-button h-9 w-9 px-0"
+                            aria-label={t("common.edit")}
+                            title={t("common.edit")}
+                            onClick={() => editMeasurement(measurement)}
+                          >
+                            <Edit3 aria-hidden="true" size={16} />
+                          </button>
+                          <button
+                            type="button"
+                            className="danger-button h-9 w-9 px-0"
+                            aria-label={t("common.delete")}
+                            title={t("common.delete")}
+                            onClick={() => void deleteMeasurement(measurement.id)}
+                          >
+                            <Trash2 aria-hidden="true" size={16} />
+                          </button>
                         </div>
-                        {measurement.notes ? (
-                          <p className="mt-2 text-sm text-slate-300">{measurement.notes}</p>
-                        ) : null}
                       </div>
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          className="secondary-button w-fit"
-                          onClick={() => editMeasurement(measurement)}
-                        >
-                          <Edit3 aria-hidden="true" size={17} />
-                          {t("common.edit")}
-                        </button>
-                        <button
-                          type="button"
-                          className="danger-button w-fit"
-                          onClick={() => void deleteMeasurement(measurement.id)}
-                        >
-                          <Trash2 aria-hidden="true" size={17} />
-                          {t("common.delete")}
-                        </button>
+                      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                        {metricDefinitions.map((definition) => (
+                          <div
+                            key={definition.key}
+                            className="rounded-md border border-slate-800 bg-slate-900/60 p-2"
+                          >
+                            <p className="label">{t(definition.labelKey)}</p>
+                            <p className="mt-1 text-sm font-bold text-slate-100">
+                              {formatMetric(measurement[definition.key], definition.suffix)}
+                            </p>
+                          </div>
+                        ))}
                       </div>
+                      {measurement.notes ? (
+                        <p className="text-sm text-slate-300">{measurement.notes}</p>
+                      ) : null}
                     </div>
                   </div>
                 ))}

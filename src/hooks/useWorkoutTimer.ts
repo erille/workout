@@ -16,6 +16,7 @@ export type TimerPhase =
   | "idle"
   | "exercise_time"
   | "exercise_reps"
+  | "exercise_distance"
   | "break"
   | "paused"
   | "completed"
@@ -205,7 +206,7 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
       targetEndTimeRef.current = null;
       setState((previousState) => ({
         ...previousState,
-        phase: "exercise_reps",
+        phase: step.type === "distance" ? "exercise_distance" : "exercise_reps",
         previousPhase: undefined,
         currentRound: round,
         currentStepIndex: stepIndex,
@@ -335,6 +336,7 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
     if (
       current.phase !== "exercise_time" &&
       current.phase !== "exercise_reps" &&
+      current.phase !== "exercise_distance" &&
       current.phase !== "break"
     ) {
       return;
@@ -386,7 +388,7 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
   const completeRepsStep = useCallback(() => {
     const current = stateRef.current;
 
-    if (current.phase !== "exercise_reps") {
+    if (current.phase !== "exercise_reps" && current.phase !== "exercise_distance") {
       return;
     }
 

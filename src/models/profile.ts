@@ -29,6 +29,7 @@ export type CharacterProfile = {
   name: string;
   age?: number;
   heightCm?: number;
+  photoDataUrl?: string;
   avatar: AvatarSettings;
   measurements: BodyMeasurement[];
   updatedAt: string;

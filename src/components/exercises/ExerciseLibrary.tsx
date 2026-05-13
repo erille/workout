@@ -23,6 +23,7 @@ type ExerciseFormState = {
   defaultMode: ExerciseMode;
   defaultDurationSeconds: number;
   defaultReps: number;
+  defaultDistanceMeters: number;
   notes: string;
   createdAt?: string;
 };
@@ -33,6 +34,7 @@ const emptyForm: ExerciseFormState = {
   defaultMode: "reps",
   defaultDurationSeconds: 45,
   defaultReps: 12,
+  defaultDistanceMeters: 500,
   notes: "",
 };
 
@@ -44,9 +46,18 @@ function toFormState(exercise: Exercise): ExerciseFormState {
     defaultMode: exercise.defaultMode,
     defaultDurationSeconds: exercise.defaultDurationSeconds ?? 45,
     defaultReps: exercise.defaultReps ?? 12,
+    defaultDistanceMeters: exercise.defaultDistanceMeters ?? 500,
     notes: exercise.notes ?? "",
     createdAt: exercise.createdAt,
   };
+}
+
+function modeLabel(mode: ExerciseMode, labels: { time: string; reps: string; distance: string }): string {
+  if (mode === "time") {
+    return labels.time;
+  }
+
+  return mode === "distance" ? labels.distance : labels.reps;
 }
 
 export function ExerciseLibrary({
@@ -115,6 +126,11 @@ export function ExerciseLibrary({
       return;
     }
 
+    if (form.defaultMode === "distance" && form.defaultDistanceMeters <= 0) {
+      setError(t("exercises.errorDistance"));
+      return;
+    }
+
     setIsSaving(true);
 
     const now = new Date().toISOString();
@@ -127,6 +143,10 @@ export function ExerciseLibrary({
         form.defaultMode === "time" ? Math.max(1, Math.round(form.defaultDurationSeconds)) : undefined,
       defaultReps:
         form.defaultMode === "reps" ? Math.max(1, Math.round(form.defaultReps)) : undefined,
+      defaultDistanceMeters:
+        form.defaultMode === "distance"
+          ? Math.max(1, Math.round(form.defaultDistanceMeters))
+          : undefined,
       notes: form.notes.trim() || undefined,
       createdAt: form.createdAt ?? now,
       updatedAt: now,
@@ -171,13 +191,19 @@ export function ExerciseLibrary({
                   </h3>
                   <p className="text-sm text-slate-400">
                     {t(`category.${exercise.category}`)} -{" "}
-                    {exercise.defaultMode === "time" ? t("common.time") : t("common.reps")}
+                    {modeLabel(exercise.defaultMode, {
+                      time: t("common.time"),
+                      reps: t("common.reps"),
+                      distance: t("common.distance"),
+                    })}
                   </p>
                 </div>
                 <span className="rounded-md border border-slate-700 px-2 py-1 text-xs font-semibold text-slate-300">
                   {exercise.defaultMode === "time"
                     ? `${exercise.defaultDurationSeconds ?? 0}s`
-                    : `${exercise.defaultReps ?? 0} ${t("common.reps")}`}
+                    : exercise.defaultMode === "distance"
+                      ? `${exercise.defaultDistanceMeters ?? 0} ${t("common.meters")}`
+                      : `${exercise.defaultReps ?? 0} ${t("common.reps")}`}
                 </span>
               </div>
 
@@ -266,7 +292,7 @@ export function ExerciseLibrary({
           <fieldset className="space-y-2">
             <legend className="label">{t("exercises.defaultMode")}</legend>
             <div className="grid grid-cols-2 gap-2">
-              {(["reps", "time"] as const).map((mode) => (
+              {(["reps", "time", "distance"] as const).map((mode) => (
                 <button
                   key={mode}
                   type="button"
@@ -277,7 +303,11 @@ export function ExerciseLibrary({
                   }`}
                   onClick={() => setForm((current) => ({ ...current, defaultMode: mode }))}
                 >
-                  {mode === "time" ? t("common.time") : t("common.reps")}
+                  {modeLabel(mode, {
+                    time: t("common.time"),
+                    reps: t("common.reps"),
+                    distance: t("common.distance"),
+                  })}
                 </button>
               ))}
             </div>
@@ -295,6 +325,22 @@ export function ExerciseLibrary({
                   setForm((current) => ({
                     ...current,
                     defaultDurationSeconds: Number(event.target.value),
+                  }))
+                }
+              />
+            </label>
+          ) : form.defaultMode === "distance" ? (
+            <label className="block space-y-2">
+              <span className="label">{t("exercises.defaultDistance")}</span>
+              <input
+                className="field"
+                min={1}
+                type="number"
+                value={form.defaultDistanceMeters}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    defaultDistanceMeters: Number(event.target.value),
                   }))
                 }
               />

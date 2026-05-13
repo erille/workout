@@ -1,5 +1,22 @@
-import { CalendarPlus, Copy, Edit3, Plus, Save, Search, Trash2, X } from "lucide-react";
-import { FormEvent, useMemo, useState } from "react";
+import {
+  closestCenter,
+  DndContext,
+  type DragEndEvent,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { CalendarPlus, Copy, Edit3, GripVertical, Plus, Save, Search, Trash2, X } from "lucide-react";
+import { type CSSProperties, FormEvent, type ReactNode, useMemo, useState } from "react";
 import { useI18n } from "../../i18n/I18nContext";
 import { translateExerciseName } from "../../i18n/exerciseNames";
 import type { Exercise } from "../../models/exercise";
@@ -17,16 +34,22 @@ type WorkoutHistoryProps = {
 type ManualStepForm = {
   id: string;
   exerciseName: string;
-  type: "time" | "reps";
+  type: "time" | "reps" | "distance";
   durationSeconds: number;
   reps: number;
+  distanceMeters: number;
   round: number;
   breakSeconds: number;
   weight: string;
 };
 
 function stepLabel(step: WorkoutSessionStep, repsLabel: string): string {
-  const target = step.type === "time" ? `${step.durationSeconds}s` : `${step.reps} ${repsLabel}`;
+  const target =
+    step.type === "time"
+      ? `${step.durationSeconds}s`
+      : step.type === "distance"
+        ? `${step.distanceMeters} m`
+        : `${step.reps} ${repsLabel}`;
   const weight = typeof step.weight === "number" ? ` - ${step.weight} kg` : "";
   return `${target}${weight}`;
 }
@@ -38,6 +61,7 @@ function createManualStep(): ManualStepForm {
     type: "reps",
     durationSeconds: 60,
     reps: 10,
+    distanceMeters: 500,
     round: 1,
     breakSeconds: 0,
     weight: "",
@@ -51,6 +75,7 @@ function createManualStepFromSessionStep(step: WorkoutSessionStep): ManualStepFo
     type: step.type,
     durationSeconds: step.durationSeconds ?? 60,
     reps: step.reps ?? 10,
+    distanceMeters: step.distanceMeters ?? 500,
     round: step.round,
     breakSeconds: step.breakSeconds,
     weight: typeof step.weight === "number" ? String(step.weight) : "",
@@ -78,6 +103,39 @@ function getSessionDurationMinutes(session: WorkoutSession): number {
   return elapsedSeconds > 0 ? Math.max(1, Math.round(elapsedSeconds / 60)) : 60;
 }
 
+function SortableManualStep({
+  children,
+  stepId,
+}: {
+  children: (
+    sortable: Pick<
+      ReturnType<typeof useSortable>,
+      "attributes" | "isDragging" | "listeners" | "setNodeRef"
+    > & { style: CSSProperties },
+  ) => ReactNode;
+  stepId: string;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: stepId,
+  });
+  const style: CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <>
+      {children({
+        attributes,
+        isDragging,
+        listeners,
+        setNodeRef,
+        style,
+      })}
+    </>
+  );
+}
+
 export function WorkoutHistory({
   exercises,
   onDeleteSession,
@@ -95,6 +153,13 @@ export function WorkoutHistory({
   const [manualError, setManualError] = useState<string | null>(null);
   const [manualMessage, setManualMessage] = useState<string | null>(null);
   const [isSavingManual, setIsSavingManual] = useState(false);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
 
   const exerciseByName = useMemo(() => {
     return new Map(exercises.map((exercise) => [exercise.name.toLowerCase(), exercise]));
@@ -187,6 +252,27 @@ export function WorkoutHistory({
     setManualMessage(null);
   };
 
+  const handleManualDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (!over || active.id === over.id) {
+      return;
+    }
+
+    setManualSteps((steps) => {
+      const oldIndex = steps.findIndex((step) => step.id === active.id);
+      const newIndex = steps.findIndex((step) => step.id === over.id);
+
+      if (oldIndex < 0 || newIndex < 0) {
+        return steps;
+      }
+
+      return arrayMove(steps, oldIndex, newIndex);
+    });
+    setManualError(null);
+    setManualMessage(null);
+  };
+
   const handleManualSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setManualError(null);
@@ -222,6 +308,7 @@ export function WorkoutHistory({
       const exerciseName = step.exerciseName.trim();
       const durationSeconds = Math.round(Number(step.durationSeconds));
       const reps = Math.round(Number(step.reps));
+      const distanceMeters = Math.round(Number(step.distanceMeters));
       const round = Math.round(Number(step.round));
       const breakSeconds = Math.round(Number(step.breakSeconds));
       const weight = parseOptionalWeight(step.weight);
@@ -234,6 +321,7 @@ export function WorkoutHistory({
         breakSeconds < 0 ||
         (step.type === "time" && (!Number.isFinite(durationSeconds) || durationSeconds <= 0)) ||
         (step.type === "reps" && (!Number.isFinite(reps) || reps <= 0)) ||
+        (step.type === "distance" && (!Number.isFinite(distanceMeters) || distanceMeters <= 0)) ||
         (typeof weight === "number" && weight < 0)
       ) {
         setManualError(t("history.manualErrorStepValues"));
@@ -249,6 +337,7 @@ export function WorkoutHistory({
         type: step.type,
         durationSeconds: step.type === "time" ? durationSeconds : undefined,
         reps: step.type === "reps" ? reps : undefined,
+        distanceMeters: step.type === "distance" ? distanceMeters : undefined,
         breakSeconds,
         weight,
         round,
@@ -410,129 +499,178 @@ export function WorkoutHistory({
               </button>
             </div>
 
-            <div className="space-y-3">
-              {manualSteps.map((step, index) => (
-                <article key={step.id} className="rounded-md border border-slate-800 bg-slate-950/70 p-3">
-                  <div className="grid gap-3 lg:grid-cols-[minmax(11rem,1fr)_8rem_8rem_6rem_8rem_8rem_auto] lg:items-end">
-                    <label className="space-y-2">
-                      <span className="label">
-                        {t("builder.step", { number: index + 1 })} - {t("common.exercise")}
-                      </span>
-                      <input
-                        className="field"
-                        list="manual-exercise-options"
-                        value={step.exerciseName}
-                        onChange={(event) =>
-                          updateManualStep(step.id, { exerciseName: event.target.value })
-                        }
-                        placeholder={t("history.manualExercisePlaceholder")}
-                      />
-                    </label>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleManualDragEnd}>
+              <SortableContext
+                items={manualSteps.map((step) => step.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="space-y-3">
+                  {manualSteps.map((step, index) => (
+                    <SortableManualStep key={step.id} stepId={step.id}>
+                      {({ attributes, isDragging, listeners, setNodeRef, style }) => (
+                        <article
+                          ref={setNodeRef}
+                          style={style}
+                          className={`rounded-md border border-slate-800 bg-slate-950/70 p-3 ${
+                            isDragging ? "border-cyan-300/80 bg-slate-800" : ""
+                          }`}
+                        >
+                          <div className="grid gap-3 lg:grid-cols-[auto_minmax(11rem,1fr)_8rem_8rem_6rem_8rem_8rem_auto] lg:items-end">
+                            <button
+                              type="button"
+                              className="secondary-button h-11 px-3"
+                              aria-label={t("history.manualDragStep", { number: index + 1 })}
+                              {...attributes}
+                              {...listeners}
+                            >
+                              <GripVertical aria-hidden="true" size={17} />
+                            </button>
 
-                    <label className="space-y-2">
-                      <span className="label">{t("builder.type")}</span>
-                      <select
-                        className="field"
-                        value={step.type}
-                        onChange={(event) =>
-                          updateManualStep(step.id, { type: event.target.value as ManualStepForm["type"] })
-                        }
-                      >
-                        <option value="reps">{t("common.reps")}</option>
-                        <option value="time">{t("common.time")}</option>
-                      </select>
-                    </label>
+                            <label className="space-y-2">
+                              <span className="label">
+                                {t("builder.step", { number: index + 1 })} - {t("common.exercise")}
+                              </span>
+                              <input
+                                className="field"
+                                list="manual-exercise-options"
+                                value={step.exerciseName}
+                                onChange={(event) =>
+                                  updateManualStep(step.id, { exerciseName: event.target.value })
+                                }
+                                placeholder={t("history.manualExercisePlaceholder")}
+                              />
+                            </label>
 
-                    {step.type === "time" ? (
-                      <label className="space-y-2">
-                        <span className="label">{t("builder.duration")}</span>
-                        <input
-                          className="field"
-                          min={1}
-                          type="number"
-                          value={step.durationSeconds}
-                          onChange={(event) =>
-                            updateManualStep(step.id, { durationSeconds: Number(event.target.value) })
-                          }
-                        />
-                      </label>
-                    ) : (
-                      <label className="space-y-2">
-                        <span className="label">{t("common.reps")}</span>
-                        <input
-                          className="field"
-                          min={1}
-                          type="number"
-                          value={step.reps}
-                          onChange={(event) =>
-                            updateManualStep(step.id, { reps: Number(event.target.value) })
-                          }
-                        />
-                      </label>
-                    )}
+                            <label className="space-y-2">
+                              <span className="label">{t("builder.type")}</span>
+                              <select
+                                className="field"
+                                value={step.type}
+                                onChange={(event) =>
+                                  updateManualStep(step.id, {
+                                    type: event.target.value as ManualStepForm["type"],
+                                  })
+                                }
+                              >
+                                <option value="reps">{t("common.reps")}</option>
+                                <option value="time">{t("common.time")}</option>
+                                <option value="distance">{t("common.distance")}</option>
+                              </select>
+                            </label>
 
-                    <label className="space-y-2">
-                      <span className="label">{t("common.round")}</span>
-                      <input
-                        className="field"
-                        min={1}
-                        type="number"
-                        value={step.round}
-                        onChange={(event) =>
-                          updateManualStep(step.id, { round: Number(event.target.value) })
-                        }
-                      />
-                    </label>
+                            {step.type === "time" ? (
+                              <label className="space-y-2">
+                                <span className="label">{t("builder.duration")}</span>
+                                <input
+                                  className="field"
+                                  min={1}
+                                  type="number"
+                                  value={step.durationSeconds}
+                                  onChange={(event) =>
+                                    updateManualStep(step.id, {
+                                      durationSeconds: Number(event.target.value),
+                                    })
+                                  }
+                                />
+                              </label>
+                            ) : step.type === "distance" ? (
+                              <label className="space-y-2">
+                                <span className="label">{t("common.meters")}</span>
+                                <input
+                                  className="field"
+                                  min={1}
+                                  type="number"
+                                  value={step.distanceMeters}
+                                  onChange={(event) =>
+                                    updateManualStep(step.id, {
+                                      distanceMeters: Number(event.target.value),
+                                    })
+                                  }
+                                />
+                              </label>
+                            ) : (
+                              <label className="space-y-2">
+                                <span className="label">{t("common.reps")}</span>
+                                <input
+                                  className="field"
+                                  min={1}
+                                  type="number"
+                                  value={step.reps}
+                                  onChange={(event) =>
+                                    updateManualStep(step.id, { reps: Number(event.target.value) })
+                                  }
+                                />
+                              </label>
+                            )}
 
-                    <label className="space-y-2">
-                      <span className="label">{t("builder.weightKg")}</span>
-                      <input
-                        className="field"
-                        min={0}
-                        placeholder={t("common.optional")}
-                        step={0.5}
-                        type="number"
-                        value={step.weight}
-                        onChange={(event) => updateManualStep(step.id, { weight: event.target.value })}
-                      />
-                    </label>
+                            <label className="space-y-2">
+                              <span className="label">{t("common.round")}</span>
+                              <input
+                                className="field"
+                                min={1}
+                                type="number"
+                                value={step.round}
+                                onChange={(event) =>
+                                  updateManualStep(step.id, { round: Number(event.target.value) })
+                                }
+                              />
+                            </label>
 
-                    <label className="space-y-2">
-                      <span className="label">{t("builder.break")}</span>
-                      <input
-                        className="field"
-                        min={0}
-                        type="number"
-                        value={step.breakSeconds}
-                        onChange={(event) =>
-                          updateManualStep(step.id, { breakSeconds: Number(event.target.value) })
-                        }
-                      />
-                    </label>
+                            <label className="space-y-2">
+                              <span className="label">{t("builder.weightKg")}</span>
+                              <input
+                                className="field"
+                                min={0}
+                                placeholder={t("common.optional")}
+                                step={0.5}
+                                type="number"
+                                value={step.weight}
+                                onChange={(event) =>
+                                  updateManualStep(step.id, { weight: event.target.value })
+                                }
+                              />
+                            </label>
 
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        className="secondary-button h-11 px-3"
-                        aria-label={t("history.manualDuplicateStep", { number: index + 1 })}
-                        onClick={() => duplicateManualStep(step.id)}
-                      >
-                        <Copy aria-hidden="true" size={17} />
-                      </button>
-                      <button
-                        type="button"
-                        className="danger-button h-11 px-3"
-                        aria-label={t("history.manualRemoveStep", { number: index + 1 })}
-                        disabled={manualSteps.length === 1}
-                        onClick={() => removeManualStep(step.id)}
-                      >
-                        <Trash2 aria-hidden="true" size={17} />
-                      </button>
-                    </div>
-                  </div>
-                </article>
-              ))}
-            </div>
+                            <label className="space-y-2">
+                              <span className="label">{t("builder.break")}</span>
+                              <input
+                                className="field"
+                                min={0}
+                                type="number"
+                                value={step.breakSeconds}
+                                onChange={(event) =>
+                                  updateManualStep(step.id, { breakSeconds: Number(event.target.value) })
+                                }
+                              />
+                            </label>
+
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                className="secondary-button h-11 px-3"
+                                aria-label={t("history.manualDuplicateStep", { number: index + 1 })}
+                                onClick={() => duplicateManualStep(step.id)}
+                              >
+                                <Copy aria-hidden="true" size={17} />
+                              </button>
+                              <button
+                                type="button"
+                                className="danger-button h-11 px-3"
+                                aria-label={t("history.manualRemoveStep", { number: index + 1 })}
+                                disabled={manualSteps.length === 1}
+                                onClick={() => removeManualStep(step.id)}
+                              >
+                                <Trash2 aria-hidden="true" size={17} />
+                              </button>
+                            </div>
+                          </div>
+                        </article>
+                      )}
+                    </SortableManualStep>
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
           </div>
 
           {manualError ? (
@@ -547,6 +685,10 @@ export function WorkoutHistory({
           ) : null}
 
           <div className="flex flex-col gap-2 sm:flex-row">
+            <button type="button" className="secondary-button" onClick={addManualStep}>
+              <Plus aria-hidden="true" size={17} />
+              {t("history.manualAddStep")}
+            </button>
             <button type="submit" className="primary-button" disabled={isSavingManual}>
               <Save aria-hidden="true" size={17} />
               {editingSessionId ? t("history.editSave") : t("history.manualSave")}

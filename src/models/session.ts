@@ -2,9 +2,10 @@ export type WorkoutSessionStep = {
   id: string;
   exerciseId?: string;
   exerciseName: string;
-  type: "time" | "reps";
+  type: "time" | "reps" | "distance";
   durationSeconds?: number;
   reps?: number;
+  distanceMeters?: number;
   breakSeconds: number;
   weight?: number;
   round: number;

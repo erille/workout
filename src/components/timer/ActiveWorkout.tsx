@@ -33,7 +33,12 @@ function describeStep(
     return noStepLabel;
   }
 
-  const target = step.type === "time" ? `${step.durationSeconds}s` : `${step.reps} reps`;
+  const target =
+    step.type === "time"
+      ? `${step.durationSeconds}s`
+      : step.type === "distance"
+        ? `${step.distanceMeters} m`
+        : `${step.reps} reps`;
   const selectedWeight = options ? options.weight : step.weight;
   const weight = typeof selectedWeight === "number" ? ` - ${selectedWeight} kg` : "";
   return `${translateExerciseName(step, language)} - ${target}${weight}`;
@@ -111,7 +116,11 @@ function SessionSummary({ session }: { session: WorkoutSession }) {
             </p>
             <p className="font-semibold text-slate-50">{translateExerciseName(step, language)}</p>
             <p className="text-sm text-slate-400">
-              {step.type === "time" ? `${step.durationSeconds}s` : `${step.reps} ${t("common.reps")}`}
+              {step.type === "time"
+                ? `${step.durationSeconds}s`
+                : step.type === "distance"
+                  ? `${step.distanceMeters} ${t("common.meters")}`
+                  : `${step.reps} ${t("common.reps")}`}
               {typeof step.weight === "number" ? ` - ${step.weight} kg` : ""}
             </p>
           </div>
@@ -152,7 +161,10 @@ function WorkoutRunner({
   });
 
   const isRunning =
-    state.phase === "exercise_time" || state.phase === "exercise_reps" || state.phase === "break";
+    state.phase === "exercise_time" ||
+    state.phase === "exercise_reps" ||
+    state.phase === "exercise_distance" ||
+    state.phase === "break";
   const isCountdown = state.phase === "exercise_time" || state.phase === "break";
   const completedStepCount =
     (state.currentRound - 1) * plan.steps.length +
@@ -234,6 +246,13 @@ function WorkoutRunner({
                   </div>
                   <p className="mt-2 text-xl font-semibold text-slate-300">{t("common.reps")}</p>
                 </div>
+              ) : state.phase === "exercise_distance" && currentStep?.type === "distance" ? (
+                <div>
+                  <div className="text-7xl font-black tracking-normal text-cyan-200 sm:text-8xl">
+                    {currentStep.distanceMeters}
+                  </div>
+                  <p className="mt-2 text-xl font-semibold text-slate-300">{t("common.meters")}</p>
+                </div>
               ) : (
                 <div className="text-7xl font-black tracking-normal text-cyan-200 sm:text-8xl">
                   {isCountdown ? formatTimerDisplay(state.remainingSeconds) : "--:--"}
@@ -264,7 +283,7 @@ function WorkoutRunner({
                   {t("timer.resume")}
                 </button>
               ) : null}
-              {state.phase === "exercise_reps" ? (
+              {state.phase === "exercise_reps" || state.phase === "exercise_distance" ? (
                 <button type="button" className="primary-button min-h-14" onClick={completeRepsStep}>
                   <Check aria-hidden="true" size={20} />
                   {t("timer.done")}

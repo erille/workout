@@ -11,7 +11,7 @@ export const exerciseCategories = [
 
 export type ExerciseCategory = (typeof exerciseCategories)[number];
 
-export type ExerciseMode = "time" | "reps";
+export type ExerciseMode = "time" | "reps" | "distance";
 
 export type Exercise = {
   id: string;
@@ -20,6 +20,7 @@ export type Exercise = {
   defaultMode: ExerciseMode;
   defaultDurationSeconds?: number;
   defaultReps?: number;
+  defaultDistanceMeters?: number;
   notes?: string;
   createdAt: string;
   updatedAt: string;

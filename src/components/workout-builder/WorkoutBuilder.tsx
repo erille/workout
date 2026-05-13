@@ -42,6 +42,7 @@ type DraftPlan = {
 type StepDefaults = {
   durationSeconds: number;
   reps: number;
+  distanceMeters: number;
   breakSeconds: number;
   weight?: number;
 };
@@ -79,6 +80,14 @@ function createStepFromExercise(exercise: Exercise, defaults: StepDefaults): Wor
     };
   }
 
+  if (exercise.defaultMode === "distance") {
+    return {
+      ...common,
+      type: "distance",
+      distanceMeters: exercise.defaultDistanceMeters ?? defaults.distanceMeters,
+    };
+  }
+
   return {
     ...common,
     type: "reps",
@@ -86,8 +95,16 @@ function createStepFromExercise(exercise: Exercise, defaults: StepDefaults): Wor
   };
 }
 
-function getStepTarget(step: WorkoutStep, repsLabel: string): string {
-  const target = step.type === "time" ? `${step.durationSeconds}s` : `${step.reps} ${repsLabel}`;
+function getStepTarget(
+  step: WorkoutStep,
+  labels: { reps: string; meters: string },
+): string {
+  const target =
+    step.type === "time"
+      ? `${step.durationSeconds}s`
+      : step.type === "distance"
+        ? `${step.distanceMeters} ${labels.meters}`
+        : `${step.reps} ${labels.reps}`;
   const weight = typeof step.weight === "number" ? ` - ${step.weight} kg` : "";
 
   return `${target}${weight}`;
@@ -150,7 +167,9 @@ function SortableStep({
           <h3 className="break-words text-lg font-bold text-slate-50">
             {translateExerciseName(step, language)}
           </h3>
-          <p className="text-sm text-slate-400">{getStepTarget(step, t("common.reps"))}</p>
+          <p className="text-sm text-slate-400">
+            {getStepTarget(step, { reps: t("common.reps"), meters: t("common.meters") })}
+          </p>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -165,6 +184,7 @@ function SortableStep({
             >
               <option value="time">{t("common.time")}</option>
               <option value="reps">{t("common.reps")}</option>
+              <option value="distance">{t("common.distance")}</option>
             </select>
           </label>
 
@@ -182,6 +202,26 @@ function SortableStep({
                       ? {
                           ...current,
                           durationSeconds: Math.max(1, Math.round(Number(event.target.value))),
+                        }
+                      : current,
+                  )
+                }
+              />
+            </label>
+          ) : step.type === "distance" ? (
+            <label className="space-y-2">
+              <span className="label">{t("common.meters")}</span>
+              <input
+                className="field"
+                min={1}
+                type="number"
+                value={step.distanceMeters}
+                onChange={(event) =>
+                  onUpdate(step.id, (current) =>
+                    current.type === "distance"
+                      ? {
+                          ...current,
+                          distanceMeters: Math.max(1, Math.round(Number(event.target.value))),
                         }
                       : current,
                   )
@@ -259,6 +299,7 @@ function SortableStep({
         {t("builder.defaults", {
           duration: defaults.durationSeconds,
           reps: defaults.reps,
+          meters: defaults.distanceMeters,
           breakSeconds: defaults.breakSeconds,
           weight: typeof defaults.weight === "number" ? ` - ${defaults.weight} kg` : "",
         })}
@@ -282,6 +323,7 @@ export function WorkoutBuilder({
   const [defaults, setDefaults] = useState<StepDefaults>({
     durationSeconds: 45,
     reps: 12,
+    distanceMeters: 500,
     breakSeconds: 15,
   });
   const [selectedExerciseId, setSelectedExerciseId] = useState(exercises[0]?.id ?? "");
@@ -346,6 +388,15 @@ export function WorkoutBuilder({
         };
       }
 
+      if (type === "distance") {
+        return {
+          ...common,
+          type,
+          distanceMeters:
+            step.type === "distance" ? step.distanceMeters : defaults.distanceMeters,
+        };
+      }
+
       return {
         ...common,
         type,
@@ -395,7 +446,11 @@ export function WorkoutBuilder({
         return true;
       }
 
-      return step.type === "time" ? step.durationSeconds <= 0 : step.reps <= 0;
+      if (step.type === "time") {
+        return step.durationSeconds <= 0;
+      }
+
+      return step.type === "distance" ? step.distanceMeters <= 0 : step.reps <= 0;
     });
 
     if (invalidStep) {
@@ -554,7 +609,7 @@ export function WorkoutBuilder({
             </label>
           </div>
 
-          <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_8rem_8rem_8rem_9rem_auto] lg:items-end">
+          <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_8rem_8rem_8rem_8rem_9rem_auto] lg:items-end">
             <label className="space-y-2">
               <span className="label">{t("builder.exercise")}</span>
               <select
@@ -595,6 +650,21 @@ export function WorkoutBuilder({
                   setDefaults((current) => ({
                     ...current,
                     reps: Math.max(1, Math.round(Number(event.target.value))),
+                  }))
+                }
+              />
+            </label>
+            <label className="space-y-2">
+              <span className="label">{t("common.meters")}</span>
+              <input
+                className="field"
+                min={1}
+                type="number"
+                value={defaults.distanceMeters}
+                onChange={(event) =>
+                  setDefaults((current) => ({
+                    ...current,
+                    distanceMeters: Math.max(1, Math.round(Number(event.target.value))),
                   }))
                 }
               />

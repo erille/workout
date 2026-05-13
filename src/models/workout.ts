@@ -18,7 +18,17 @@ export type RepsWorkoutStep = {
   weight?: number;
 };
 
-export type WorkoutStep = TimeWorkoutStep | RepsWorkoutStep;
+export type DistanceWorkoutStep = {
+  id: string;
+  type: "distance";
+  exerciseId: string;
+  exerciseName: string;
+  distanceMeters: number;
+  breakSeconds: number;
+  weight?: number;
+};
+
+export type WorkoutStep = TimeWorkoutStep | RepsWorkoutStep | DistanceWorkoutStep;
 
 export type WorkoutPlan = {
   id: string;

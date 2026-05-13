@@ -9,6 +9,7 @@ const voiceTemplates: Record<
   {
     time: string[];
     reps: string[];
+    distance: string[];
     break: string[];
     complete: string[];
   }
@@ -23,6 +24,11 @@ const voiceTemplates: Record<
       "Now let's do {exercise}, {reps} reps.",
       "Next, {exercise}, {reps} strong reps.",
       "Get ready for {exercise}, {reps} reps.",
+    ],
+    distance: [
+      "Next, {exercise} for {meters} meters.",
+      "Let's go. {exercise}, {meters} meters.",
+      "Get ready for {exercise}, {meters} meters.",
     ],
     break: [
       "Break time, {break} seconds.",
@@ -45,6 +51,11 @@ const voiceTemplates: Record<
       "Maintenant, {exercise}, {reps} repetitions.",
       "Prochain exercice, {exercise}, {reps} repetitions.",
       "Prepare-toi pour {exercise}, {reps} repetitions.",
+    ],
+    distance: [
+      "Prochain exercice, {exercise} sur {meters} metres.",
+      "On y va. {exercise}, {meters} metres.",
+      "Prepare-toi pour {exercise}, {meters} metres.",
     ],
     break: [
       "Pause, {break} secondes.",
@@ -71,6 +82,12 @@ export function getStepAnnouncement(step: WorkoutStep, language: Language): stri
     return pickTemplate(templates.time, step.exerciseName.length + step.durationSeconds)
       .replace("{exercise}", exerciseName)
       .replace("{duration}", String(step.durationSeconds));
+  }
+
+  if (step.type === "distance") {
+    return pickTemplate(templates.distance, step.exerciseName.length + step.distanceMeters)
+      .replace("{exercise}", exerciseName)
+      .replace("{meters}", String(step.distanceMeters));
   }
 
   return pickTemplate(templates.reps, step.exerciseName.length + step.reps)
@@ -114,6 +131,7 @@ export function createSessionStep(
     type: step.type,
     durationSeconds: step.type === "time" ? step.durationSeconds : undefined,
     reps: step.type === "reps" ? step.reps : undefined,
+    distanceMeters: step.type === "distance" ? step.distanceMeters : undefined,
     breakSeconds: step.breakSeconds,
     weight,
     round,

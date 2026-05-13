@@ -1,5 +1,5 @@
-import { Save, Trash2, UserRound } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { ImageUp, Save, Trash2, UserRound, X } from "lucide-react";
+import { type ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import { useI18n } from "../../i18n/I18nContext";
 import type {
   AvatarBodyType,
@@ -83,6 +83,37 @@ function createEmptyMeasurementDraft(): MeasurementDraft {
   };
 }
 
+function resizePhoto(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    const objectUrl = URL.createObjectURL(file);
+
+    image.onload = () => {
+      const maxSide = 640;
+      const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(image.width * scale));
+      canvas.height = Math.max(1, Math.round(image.height * scale));
+      const context = canvas.getContext("2d");
+
+      if (!context) {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error("Canvas is unavailable."));
+        return;
+      }
+
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(objectUrl);
+      resolve(canvas.toDataURL("image/jpeg", 0.85));
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Image could not be loaded."));
+    };
+    image.src = objectUrl;
+  });
+}
+
 function AvatarPreview({ avatar }: { avatar: AvatarSettings }) {
   const headRx = avatar.headShape === "round" ? 14 : avatar.headShape === "long" ? 8 : 2;
   const headHeight = avatar.headShape === "long" ? 46 : 38;
@@ -144,6 +175,33 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
     }));
     setProfileMessage(null);
     setError(null);
+  };
+
+  const updatePhoto = (photoDataUrl?: string) => {
+    setDraft((current) => ({
+      ...current,
+      photoDataUrl,
+    }));
+    setProfileMessage(null);
+    setError(null);
+  };
+
+  const handlePhotoUpload = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    if (!file.type.startsWith("image/")) {
+      setError(t("character.photoError"));
+      return;
+    }
+
+    void resizePhoto(file)
+      .then(updatePhoto)
+      .catch(() => setError(t("character.photoError")));
+    event.target.value = "";
   };
 
   const saveProfile = async (event: FormEvent<HTMLFormElement>) => {
@@ -217,7 +275,30 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
               </h3>
             </div>
           </div>
-          <AvatarPreview avatar={draft.avatar} />
+          {draft.photoDataUrl ? (
+            <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950">
+              <img
+                className="h-64 w-full object-cover"
+                src={draft.photoDataUrl}
+                alt={draft.name.trim() || t("character.unnamed")}
+              />
+            </div>
+          ) : (
+            <AvatarPreview avatar={draft.avatar} />
+          )}
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <label className="secondary-button cursor-pointer">
+              <ImageUp aria-hidden="true" size={17} />
+              {t("character.uploadPhoto")}
+              <input className="sr-only" accept="image/*" type="file" onChange={handlePhotoUpload} />
+            </label>
+            {draft.photoDataUrl ? (
+              <button type="button" className="danger-button" onClick={() => updatePhoto(undefined)}>
+                <X aria-hidden="true" size={17} />
+                {t("character.removePhoto")}
+              </button>
+            ) : null}
+          </div>
           <div className="grid grid-cols-2 gap-3">
             {[
               ["skinColor", t("character.skinColor")],

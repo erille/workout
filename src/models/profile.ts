@@ -16,6 +16,7 @@ export type BodyMeasurement = {
   id: string;
   measuredAt: string;
   weightKg?: number;
+  muscleMassKg?: number;
   waistCm?: number;
   chestCm?: number;
   bicepsCm?: number;

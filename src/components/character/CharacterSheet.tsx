@@ -1,4 +1,4 @@
-import { ImageUp, Save, Trash2, UserRound, X } from "lucide-react";
+import { Edit3, ImageUp, LineChart, List, Save, Trash2, UserRound, X } from "lucide-react";
 import { type ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import { useI18n } from "../../i18n/I18nContext";
 import type {
@@ -18,6 +18,7 @@ type CharacterSheetProps = {
 type MeasurementDraft = {
   measuredAt: string;
   weightKg: string;
+  muscleMassKg: string;
   waistCm: string;
   chestCm: string;
   bicepsCm: string;
@@ -26,6 +27,18 @@ type MeasurementDraft = {
   bodyFatPercent: string;
   notes: string;
 };
+
+type MeasurementMetricKey =
+  | "weightKg"
+  | "muscleMassKg"
+  | "waistCm"
+  | "chestCm"
+  | "bicepsCm"
+  | "thighCm"
+  | "hipCm"
+  | "bodyFatPercent";
+
+type TimelineView = "history" | "graph";
 
 const swatches = [
   "#f2c09a",
@@ -42,14 +55,15 @@ const swatches = [
   "#111827",
 ];
 
-const metricKeys = [
-  "weightKg",
-  "waistCm",
-  "chestCm",
-  "bicepsCm",
-  "thighCm",
-  "hipCm",
-  "bodyFatPercent",
+const metricDefinitions = [
+  { key: "weightKg", labelKey: "character.weightKg", suffix: " kg", color: "#22d3ee" },
+  { key: "muscleMassKg", labelKey: "character.muscleMassKg", suffix: " kg", color: "#34d399" },
+  { key: "waistCm", labelKey: "character.waistCm", suffix: " cm", color: "#f59e0b" },
+  { key: "chestCm", labelKey: "character.chestCm", suffix: " cm", color: "#f472b6" },
+  { key: "bicepsCm", labelKey: "character.bicepsCm", suffix: " cm", color: "#a78bfa" },
+  { key: "thighCm", labelKey: "character.thighCm", suffix: " cm", color: "#fb7185" },
+  { key: "hipCm", labelKey: "character.hipCm", suffix: " cm", color: "#60a5fa" },
+  { key: "bodyFatPercent", labelKey: "character.bodyFatPercent", suffix: "%", color: "#f97316" },
 ] as const;
 
 function todayInputValue(): string {
@@ -57,7 +71,9 @@ function todayInputValue(): string {
 }
 
 function dateInputValue(value: string): string {
-  return new Date(value).toISOString().slice(0, 10);
+  const date = new Date(value);
+
+  return Number.isNaN(date.getTime()) ? todayInputValue() : date.toISOString().slice(0, 10);
 }
 
 function parseOptionalNumber(value: string): number | undefined {
@@ -66,13 +82,21 @@ function parseOptionalNumber(value: string): number | undefined {
 }
 
 function formatMetric(value: number | undefined, suffix: string): string {
-  return typeof value === "number" ? `${value}${suffix}` : "-";
+  if (typeof value !== "number") {
+    return "-";
+  }
+
+  return `${new Intl.NumberFormat(undefined, {
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 0,
+  }).format(value)}${suffix}`;
 }
 
 function createEmptyMeasurementDraft(): MeasurementDraft {
   return {
     measuredAt: todayInputValue(),
     weightKg: "",
+    muscleMassKg: "",
     waistCm: "",
     chestCm: "",
     bicepsCm: "",
@@ -81,6 +105,162 @@ function createEmptyMeasurementDraft(): MeasurementDraft {
     bodyFatPercent: "",
     notes: "",
   };
+}
+
+function stringifyMeasurementValue(value: number | undefined): string {
+  return typeof value === "number" ? String(value) : "";
+}
+
+function createMeasurementDraftFromMeasurement(measurement: BodyMeasurement): MeasurementDraft {
+  return {
+    measuredAt: dateInputValue(measurement.measuredAt),
+    weightKg: stringifyMeasurementValue(measurement.weightKg),
+    muscleMassKg: stringifyMeasurementValue(measurement.muscleMassKg),
+    waistCm: stringifyMeasurementValue(measurement.waistCm),
+    chestCm: stringifyMeasurementValue(measurement.chestCm),
+    bicepsCm: stringifyMeasurementValue(measurement.bicepsCm),
+    thighCm: stringifyMeasurementValue(measurement.thighCm),
+    hipCm: stringifyMeasurementValue(measurement.hipCm),
+    bodyFatPercent: stringifyMeasurementValue(measurement.bodyFatPercent),
+    notes: measurement.notes ?? "",
+  };
+}
+
+function measurementTime(measurement: BodyMeasurement): number {
+  const timestamp = new Date(measurement.measuredAt).getTime();
+
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function MeasurementGraph({
+  measurements,
+  noDataLabel,
+  metricLabels,
+}: {
+  measurements: BodyMeasurement[];
+  noDataLabel: string;
+  metricLabels: Record<MeasurementMetricKey, string>;
+}) {
+  const width = 720;
+  const height = 300;
+  const padding = 34;
+  const datedMeasurements = measurements.filter((measurement) => measurementTime(measurement) > 0);
+  const times = datedMeasurements.map(measurementTime);
+  const minTime = Math.min(...times);
+  const maxTime = Math.max(...times);
+  const usableWidth = width - padding * 2;
+  const usableHeight = height - padding * 2;
+  const timeRange = maxTime - minTime || 1;
+  const series = metricDefinitions
+    .map((definition) => {
+      const values = datedMeasurements
+        .map((measurement) => ({
+          time: measurementTime(measurement),
+          value: measurement[definition.key],
+        }))
+        .filter((point): point is { time: number; value: number } => typeof point.value === "number");
+
+      if (values.length === 0) {
+        return null;
+      }
+
+      const minValue = Math.min(...values.map((point) => point.value));
+      const maxValue = Math.max(...values.map((point) => point.value));
+      const valueRange = maxValue - minValue || 1;
+      const points = values.map((point) => ({
+        x: padding + ((point.time - minTime) / timeRange) * usableWidth,
+        y: padding + usableHeight - ((point.value - minValue) / valueRange) * usableHeight,
+      }));
+
+      return {
+        color: definition.color,
+        key: definition.key,
+        label: metricLabels[definition.key],
+        points,
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null);
+
+  if (series.length === 0) {
+    return (
+      <p className="rounded-md border border-dashed border-slate-700 p-3 text-sm text-slate-400">
+        {noDataLabel}
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="overflow-x-auto rounded-md border border-slate-800 bg-slate-950/70 p-3">
+        <svg className="min-w-[42rem]" viewBox={`0 0 ${width} ${height}`} role="img">
+          <line
+            x1={padding}
+            x2={padding}
+            y1={padding}
+            y2={height - padding}
+            stroke="#334155"
+            strokeWidth="1"
+          />
+          <line
+            x1={padding}
+            x2={width - padding}
+            y1={height - padding}
+            y2={height - padding}
+            stroke="#334155"
+            strokeWidth="1"
+          />
+          {[0.25, 0.5, 0.75].map((ratio) => (
+            <line
+              key={ratio}
+              x1={padding}
+              x2={width - padding}
+              y1={padding + usableHeight * ratio}
+              y2={padding + usableHeight * ratio}
+              stroke="#1e293b"
+              strokeWidth="1"
+            />
+          ))}
+          {series.map((line) => (
+            <g key={line.key}>
+              {line.points.length > 1 ? (
+                <polyline
+                  fill="none"
+                  points={line.points.map((point) => `${point.x},${point.y}`).join(" ")}
+                  stroke={line.color}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="3"
+                />
+              ) : null}
+              {line.points.map((point, index) => (
+                <circle
+                  key={`${line.key}-${index}`}
+                  cx={point.x}
+                  cy={point.y}
+                  fill={line.color}
+                  r="4"
+                />
+              ))}
+            </g>
+          ))}
+        </svg>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {series.map((line) => (
+          <span
+            key={line.key}
+            className="inline-flex items-center gap-2 rounded-md border border-slate-800 bg-slate-950/70 px-2 py-1 text-xs font-bold uppercase tracking-wide text-slate-200"
+          >
+            <span
+              className="h-2.5 w-2.5 rounded-full"
+              style={{ backgroundColor: line.color }}
+            />
+            {line.label}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function resizePhoto(file: File): Promise<string> {
@@ -145,6 +325,8 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
   const { t } = useI18n();
   const [draft, setDraft] = useState<CharacterProfile>(profile);
   const [measurementDraft, setMeasurementDraft] = useState<MeasurementDraft>(createEmptyMeasurementDraft);
+  const [editingMeasurementId, setEditingMeasurementId] = useState<string | null>(null);
+  const [timelineView, setTimelineView] = useState<TimelineView>("history");
   const [profileMessage, setProfileMessage] = useState<string | null>(null);
   const [measurementMessage, setMeasurementMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -154,10 +336,18 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
   }, [profile]);
 
   const sortedMeasurements = useMemo(
-    () => [...draft.measurements].sort((a, b) => b.measuredAt.localeCompare(a.measuredAt)),
+    () => [...draft.measurements].sort((a, b) => measurementTime(b) - measurementTime(a)),
     [draft.measurements],
   );
+  const chronologicalMeasurements = useMemo(() => [...sortedMeasurements].reverse(), [sortedMeasurements]);
   const latestMeasurement = sortedMeasurements[0];
+  const metricLabels = useMemo(
+    () =>
+      Object.fromEntries(
+        metricDefinitions.map((definition) => [definition.key, t(definition.labelKey)]),
+      ) as Record<MeasurementMetricKey, string>,
+    [t],
+  );
 
   const updateDraft = (partial: Partial<CharacterProfile>) => {
     setDraft((current) => ({ ...current, ...partial }));
@@ -210,17 +400,17 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
     setProfileMessage(t("character.profileSaved"));
   };
 
-  const addMeasurement = async (event: FormEvent<HTMLFormElement>) => {
+  const saveMeasurement = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
     setMeasurementMessage(null);
 
     const metrics = Object.fromEntries(
-      metricKeys.map((key) => [key, parseOptionalNumber(measurementDraft[key])]),
-    ) as Pick<
-      BodyMeasurement,
-      "weightKg" | "waistCm" | "chestCm" | "bicepsCm" | "thighCm" | "hipCm" | "bodyFatPercent"
-    >;
+      metricDefinitions.map((definition) => [
+        definition.key,
+        parseOptionalNumber(measurementDraft[definition.key]),
+      ]),
+    ) as Pick<BodyMeasurement, MeasurementMetricKey>;
 
     const hasMetric = Object.values(metrics).some((value) => typeof value === "number");
 
@@ -230,20 +420,39 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
     }
 
     const measurement: BodyMeasurement = {
-      id: createId("measurement"),
+      id: editingMeasurementId ?? createId("measurement"),
       measuredAt: new Date(`${measurementDraft.measuredAt}T12:00:00`).toISOString(),
       ...metrics,
       notes: measurementDraft.notes.trim() || undefined,
     };
     const nextProfile = {
       ...draft,
-      measurements: [measurement, ...draft.measurements],
+      measurements: editingMeasurementId
+        ? draft.measurements.map((item) => (item.id === editingMeasurementId ? measurement : item))
+        : [measurement, ...draft.measurements],
     };
 
     setDraft(nextProfile);
     setMeasurementDraft(createEmptyMeasurementDraft());
+    setEditingMeasurementId(null);
     await onSaveProfile(nextProfile);
-    setMeasurementMessage(t("character.measurementSaved"));
+    setMeasurementMessage(
+      editingMeasurementId ? t("character.measurementUpdated") : t("character.measurementSaved"),
+    );
+  };
+
+  const editMeasurement = (measurement: BodyMeasurement) => {
+    setEditingMeasurementId(measurement.id);
+    setMeasurementDraft(createMeasurementDraftFromMeasurement(measurement));
+    setMeasurementMessage(null);
+    setError(null);
+  };
+
+  const cancelMeasurementEdit = () => {
+    setEditingMeasurementId(null);
+    setMeasurementDraft(createEmptyMeasurementDraft());
+    setMeasurementMessage(null);
+    setError(null);
   };
 
   const deleteMeasurement = async (measurementId: string) => {
@@ -252,6 +461,9 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
       measurements: draft.measurements.filter((measurement) => measurement.id !== measurementId),
     };
     setDraft(nextProfile);
+    if (editingMeasurementId === measurementId) {
+      cancelMeasurementEdit();
+    }
     await onSaveProfile(nextProfile);
   };
 
@@ -424,13 +636,10 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
             </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {[
-                [t("character.weightKg"), formatMetric(latestMeasurement?.weightKg, " kg")],
-                [t("character.waistCm"), formatMetric(latestMeasurement?.waistCm, " cm")],
-                [t("character.chestCm"), formatMetric(latestMeasurement?.chestCm, " cm")],
-                [t("character.bicepsCm"), formatMetric(latestMeasurement?.bicepsCm, " cm")],
-                [t("character.thighCm"), formatMetric(latestMeasurement?.thighCm, " cm")],
-                [t("character.hipCm"), formatMetric(latestMeasurement?.hipCm, " cm")],
-                [t("character.bodyFatPercent"), formatMetric(latestMeasurement?.bodyFatPercent, "%")],
+                ...metricDefinitions.map((definition) => [
+                  t(definition.labelKey),
+                  formatMetric(latestMeasurement?.[definition.key], definition.suffix),
+                ]),
                 [
                   t("character.measuredAt"),
                   latestMeasurement
@@ -448,10 +657,12 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
             </div>
           </div>
 
-          <form className="panel space-y-4 p-4" onSubmit={addMeasurement}>
+          <form className="panel space-y-4 p-4" onSubmit={saveMeasurement}>
             <div>
               <p className="label">{t("character.progress")}</p>
-              <h3 className="text-xl font-bold text-slate-50">{t("character.addMeasurement")}</h3>
+              <h3 className="text-xl font-bold text-slate-50">
+                {editingMeasurementId ? t("character.editMeasurement") : t("character.addMeasurement")}
+              </h3>
             </div>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <label className="space-y-2">
@@ -468,19 +679,19 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
                   }
                 />
               </label>
-              {metricKeys.map((key) => (
-                <label key={key} className="space-y-2">
-                  <span className="label">{t(`character.${key}`)}</span>
+              {metricDefinitions.map((definition) => (
+                <label key={definition.key} className="space-y-2">
+                  <span className="label">{t(definition.labelKey)}</span>
                   <input
                     className="field"
                     min={0}
-                    step={key === "bodyFatPercent" ? 0.1 : 0.5}
+                    step={0.01}
                     type="number"
-                    value={measurementDraft[key]}
+                    value={measurementDraft[definition.key]}
                     onChange={(event) =>
                       setMeasurementDraft((current) => ({
                         ...current,
-                        [key]: event.target.value,
+                        [definition.key]: event.target.value,
                       }))
                     }
                   />
@@ -508,21 +719,67 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
                 {measurementMessage}
               </div>
             ) : null}
-            <button type="submit" className="primary-button">
-              <Save aria-hidden="true" size={17} />
-              {t("character.saveMeasurement")}
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button type="submit" className="primary-button">
+                <Save aria-hidden="true" size={17} />
+                {editingMeasurementId ? t("history.editSave") : t("character.saveMeasurement")}
+              </button>
+              {editingMeasurementId ? (
+                <button type="button" className="secondary-button" onClick={cancelMeasurementEdit}>
+                  <X aria-hidden="true" size={17} />
+                  {t("character.cancelMeasurementEdit")}
+                </button>
+              ) : null}
+            </div>
           </form>
 
           <div className="panel p-4">
-            <div>
-              <p className="label">{t("character.timeline")}</p>
-              <h3 className="text-xl font-bold text-slate-50">{t("character.measurementHistory")}</h3>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="label">{t("character.timeline")}</p>
+                <h3 className="text-xl font-bold text-slate-50">
+                  {t("character.measurementHistory")}
+                </h3>
+              </div>
+              <div className="flex w-fit rounded-md border border-slate-800 bg-slate-950/70 p-1">
+                <button
+                  type="button"
+                  className={`inline-flex items-center gap-2 rounded px-3 py-2 text-sm font-bold transition ${
+                    timelineView === "history"
+                      ? "bg-cyan-400 text-slate-950"
+                      : "text-slate-300 hover:bg-slate-800"
+                  }`}
+                  onClick={() => setTimelineView("history")}
+                >
+                  <List aria-hidden="true" size={16} />
+                  {t("character.timelineHistory")}
+                </button>
+                <button
+                  type="button"
+                  className={`inline-flex items-center gap-2 rounded px-3 py-2 text-sm font-bold transition ${
+                    timelineView === "graph"
+                      ? "bg-cyan-400 text-slate-950"
+                      : "text-slate-300 hover:bg-slate-800"
+                  }`}
+                  onClick={() => setTimelineView("graph")}
+                >
+                  <LineChart aria-hidden="true" size={16} />
+                  {t("character.timelineGraph")}
+                </button>
+              </div>
             </div>
             {sortedMeasurements.length === 0 ? (
               <p className="mt-4 rounded-md border border-dashed border-slate-700 p-3 text-sm text-slate-400">
                 {t("character.noMeasurements")}
               </p>
+            ) : timelineView === "graph" ? (
+              <div className="mt-4">
+                <MeasurementGraph
+                  measurements={chronologicalMeasurements}
+                  metricLabels={metricLabels}
+                  noDataLabel={t("character.noGraphData")}
+                />
+              </div>
             ) : (
               <div className="mt-4 space-y-2">
                 {sortedMeasurements.map((measurement) => (
@@ -537,25 +794,41 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
                             new Date(measurement.measuredAt),
                           )}
                         </p>
-                        <p className="mt-1 text-sm text-slate-400">
-                          {t("character.measurementLine", {
-                            weight: formatMetric(measurement.weightKg, " kg"),
-                            waist: formatMetric(measurement.waistCm, " cm"),
-                            biceps: formatMetric(measurement.bicepsCm, " cm"),
-                          })}
-                        </p>
+                        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                          {metricDefinitions.map((definition) => (
+                            <div
+                              key={definition.key}
+                              className="rounded-md border border-slate-800 bg-slate-900/60 p-2"
+                            >
+                              <p className="label">{t(definition.labelKey)}</p>
+                              <p className="mt-1 text-sm font-bold text-slate-100">
+                                {formatMetric(measurement[definition.key], definition.suffix)}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
                         {measurement.notes ? (
                           <p className="mt-2 text-sm text-slate-300">{measurement.notes}</p>
                         ) : null}
                       </div>
-                      <button
-                        type="button"
-                        className="danger-button w-fit"
-                        onClick={() => void deleteMeasurement(measurement.id)}
-                      >
-                        <Trash2 aria-hidden="true" size={17} />
-                        {t("common.delete")}
-                      </button>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className="secondary-button w-fit"
+                          onClick={() => editMeasurement(measurement)}
+                        >
+                          <Edit3 aria-hidden="true" size={17} />
+                          {t("common.edit")}
+                        </button>
+                        <button
+                          type="button"
+                          className="danger-button w-fit"
+                          onClick={() => void deleteMeasurement(measurement.id)}
+                        >
+                          <Trash2 aria-hidden="true" size={17} />
+                          {t("common.delete")}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}

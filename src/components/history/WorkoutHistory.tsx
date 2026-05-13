@@ -1,4 +1,4 @@
-import { CalendarPlus, Edit3, Plus, Save, Search, Trash2, X } from "lucide-react";
+import { CalendarPlus, Copy, Edit3, Plus, Save, Search, Trash2, X } from "lucide-react";
 import { FormEvent, useMemo, useState } from "react";
 import { useI18n } from "../../i18n/I18nContext";
 import { translateExerciseName } from "../../i18n/exerciseNames";
@@ -160,6 +160,29 @@ export function WorkoutHistory({
     setManualSteps((steps) =>
       steps.length === 1 ? steps : steps.filter((step) => step.id !== stepId),
     );
+    setManualError(null);
+    setManualMessage(null);
+  };
+
+  const duplicateManualStep = (stepId: string) => {
+    setManualSteps((steps) => {
+      const stepIndex = steps.findIndex((step) => step.id === stepId);
+
+      if (stepIndex < 0) {
+        return steps;
+      }
+
+      const duplicatedStep: ManualStepForm = {
+        ...steps[stepIndex],
+        id: createId("manual-step"),
+      };
+
+      return [
+        ...steps.slice(0, stepIndex + 1),
+        duplicatedStep,
+        ...steps.slice(stepIndex + 1),
+      ];
+    });
     setManualError(null);
     setManualMessage(null);
   };
@@ -487,15 +510,25 @@ export function WorkoutHistory({
                       />
                     </label>
 
-                    <button
-                      type="button"
-                      className="danger-button h-11 px-3"
-                      aria-label={t("history.manualRemoveStep", { number: index + 1 })}
-                      disabled={manualSteps.length === 1}
-                      onClick={() => removeManualStep(step.id)}
-                    >
-                      <Trash2 aria-hidden="true" size={17} />
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        className="secondary-button h-11 px-3"
+                        aria-label={t("history.manualDuplicateStep", { number: index + 1 })}
+                        onClick={() => duplicateManualStep(step.id)}
+                      >
+                        <Copy aria-hidden="true" size={17} />
+                      </button>
+                      <button
+                        type="button"
+                        className="danger-button h-11 px-3"
+                        aria-label={t("history.manualRemoveStep", { number: index + 1 })}
+                        disabled={manualSteps.length === 1}
+                        onClick={() => removeManualStep(step.id)}
+                      >
+                        <Trash2 aria-hidden="true" size={17} />
+                      </button>
+                    </div>
                   </div>
                 </article>
               ))}

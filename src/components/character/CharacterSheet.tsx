@@ -402,11 +402,38 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
   const [profileMessage, setProfileMessage] = useState<string | null>(null);
   const [measurementMessage, setMeasurementMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isAvatarMenuOpen, setIsAvatarMenuOpen] = useState(false);
+  const avatarMenuRef = useRef<HTMLDivElement>(null);
   const measurementFormRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     setDraft(profile);
   }, [profile]);
+
+  useEffect(() => {
+    if (!isAvatarMenuOpen) {
+      return undefined;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!avatarMenuRef.current?.contains(event.target as Node)) {
+        setIsAvatarMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsAvatarMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isAvatarMenuOpen]);
 
   const sortedMeasurements = useMemo(
     () => [...draft.measurements].sort((a, b) => measurementTime(b) - measurementTime(a)),
@@ -435,6 +462,7 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
       selectedAvatarUrl,
       photoDataUrl: undefined,
     }));
+    setIsAvatarMenuOpen(false);
     setProfileMessage(null);
     setError(null);
   };
@@ -565,12 +593,68 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
           </div>
           <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950">
             <img
-              className="h-64 w-full object-cover"
+              className="aspect-[377/508] w-full object-contain"
               src={draft.photoDataUrl ?? selectedAvatarUrl}
               alt={draft.name.trim() || t("character.unnamed")}
             />
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="flex flex-wrap items-center gap-2">
+            <div ref={avatarMenuRef} className="relative">
+              <button
+                type="button"
+                className="secondary-button"
+                aria-controls="avatar-menu"
+                aria-expanded={isAvatarMenuOpen}
+                onClick={() => setIsAvatarMenuOpen((current) => !current)}
+              >
+                <UserRound aria-hidden="true" size={17} />
+                {t("character.selectAvatar")}
+              </button>
+              {isAvatarMenuOpen ? (
+                <div
+                  id="avatar-menu"
+                  className="absolute left-0 top-full z-30 mt-2 w-[20rem] max-w-[calc(100vw-2rem)] rounded-md border border-slate-700 bg-slate-900 p-3 shadow-2xl"
+                >
+                  <span className="absolute -top-1 left-8 h-2 w-2 rotate-45 border-l border-t border-slate-700 bg-slate-900" />
+                  <div className="mb-3">
+                    <p className="label">{t("character.avatarMenuTitle")}</p>
+                    {draft.photoDataUrl ? (
+                      <p className="mt-1 text-sm text-slate-400">
+                        {t("character.photoOverridesAvatar")}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="grid max-h-[70vh] grid-cols-2 gap-3 overflow-y-auto pr-1">
+                    {builtInAvatars.map((avatar) => {
+                      const isSelected = selectedAvatarUrl === avatar.url && !draft.photoDataUrl;
+
+                      return (
+                        <button
+                          key={avatar.url}
+                          type="button"
+                          className={`overflow-hidden rounded-md border bg-slate-950 text-left transition ${
+                            isSelected
+                              ? "border-cyan-300 ring-2 ring-cyan-300/35"
+                              : "border-slate-800 hover:border-slate-500"
+                          }`}
+                          aria-pressed={isSelected}
+                          onClick={() => updateBuiltInAvatar(avatar.url)}
+                        >
+                          <img
+                            className="aspect-[377/508] w-full object-contain"
+                            src={avatar.url}
+                            alt={t(avatar.labelKey)}
+                          />
+                          <span className="block px-2 py-1 text-xs font-semibold text-slate-300">
+                            {t(avatar.labelKey)}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+            </div>
             <label className="secondary-button cursor-pointer">
               <ImageUp aria-hidden="true" size={17} />
               {t("character.uploadPhoto")}
@@ -582,42 +666,6 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
                 {t("character.removePhoto")}
               </button>
             ) : null}
-          </div>
-          <div className="space-y-3">
-            <div>
-              <p className="label">{t("character.builtInAvatars")}</p>
-              {draft.photoDataUrl ? (
-                <p className="mt-1 text-sm text-slate-400">{t("character.photoOverridesAvatar")}</p>
-              ) : null}
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              {builtInAvatars.map((avatar) => {
-                const isSelected = selectedAvatarUrl === avatar.url && !draft.photoDataUrl;
-
-                return (
-                  <button
-                    key={avatar.url}
-                    type="button"
-                    className={`overflow-hidden rounded-md border bg-slate-950 text-left transition ${
-                      isSelected
-                        ? "border-cyan-300 ring-2 ring-cyan-300/35"
-                        : "border-slate-800 hover:border-slate-500"
-                    }`}
-                    aria-pressed={isSelected}
-                    onClick={() => updateBuiltInAvatar(avatar.url)}
-                  >
-                    <img
-                      className="aspect-square w-full object-cover"
-                      src={avatar.url}
-                      alt={t(avatar.labelKey)}
-                    />
-                    <span className="block px-2 py-1 text-xs font-semibold text-slate-300">
-                      {t(avatar.labelKey)}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
           </div>
         </aside>
 

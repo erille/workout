@@ -9,9 +9,12 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useI18n } from "../../i18n/I18nContext";
+import { translateExerciseName } from "../../i18n/exerciseNames";
+import type { CharacterProfile } from "../../models/profile";
 import type { WorkoutSession } from "../../models/session";
 
 type StatisticsPageProps = {
+  profile: CharacterProfile;
   sessions: WorkoutSession[];
 };
 
@@ -28,6 +31,30 @@ type CalendarDay = {
   date: Date;
   count: number;
   isCurrentMonth: boolean;
+};
+
+type LiftEntry = {
+  date: Date;
+  exerciseId?: string;
+  exerciseName: string;
+  estimatedOneRepMaxKg: number;
+  reps: number;
+  volumeKg: number;
+  weightKg: number;
+};
+
+type LiftExerciseSummary = {
+  bestEstimatedOneRepMaxKg: number;
+  exerciseId?: string;
+  exerciseName: string;
+  sets: number;
+  volumeKg: number;
+};
+
+type LiftVolumeBucket = {
+  key: string;
+  label: string;
+  volumeKg: number;
 };
 
 const viewModes: Array<{ id: ViewMode; labelKey: "statistics.weeks" | "statistics.month" | "statistics.year" }> = [
@@ -179,8 +206,120 @@ function buildYearBuckets(dates: Date[], locale: string, selectedYear: Date): Pe
   });
 }
 
+function estimateOneRepMaxKg(weightKg: number, reps: number): number {
+  return weightKg * (1 + reps / 30);
+}
+
+function getLatestBodyWeightKg(profile: CharacterProfile): number | undefined {
+  return [...profile.measurements]
+    .filter((measurement) => typeof measurement.weightKg === "number")
+    .sort((a, b) => new Date(b.measuredAt).getTime() - new Date(a.measuredAt).getTime())[0]?.weightKg;
+}
+
+function getLiftEntries(sessions: WorkoutSession[]): LiftEntry[] {
+  return sessions.flatMap((session) => {
+    const date = startOfDay(new Date(session.startedAt));
+
+    if (!isValidDate(date)) {
+      return [];
+    }
+
+    return session.steps.flatMap((step) => {
+      if (
+        step.type !== "reps" ||
+        typeof step.weight !== "number" ||
+        step.weight <= 0 ||
+        typeof step.reps !== "number" ||
+        step.reps <= 0
+      ) {
+        return [];
+      }
+
+      return [
+        {
+          date,
+          exerciseId: step.exerciseId,
+          exerciseName: step.exerciseName,
+          estimatedOneRepMaxKg: estimateOneRepMaxKg(step.weight, step.reps),
+          reps: step.reps,
+          volumeKg: step.weight * step.reps,
+          weightKg: step.weight,
+        },
+      ];
+    });
+  });
+}
+
+function getLiftVolumeInRange(entries: LiftEntry[], start: Date, end: Date): number {
+  const startTime = start.getTime();
+  const endTime = end.getTime();
+
+  return entries
+    .filter((entry) => {
+      const time = entry.date.getTime();
+      return time >= startTime && time < endTime;
+    })
+    .reduce((total, entry) => total + entry.volumeKg, 0);
+}
+
+function buildLiftYearBuckets(
+  entries: LiftEntry[],
+  locale: string,
+  selectedYear: Date,
+): LiftVolumeBucket[] {
+  const start = yearStart(selectedYear);
+
+  return Array.from({ length: 12 }, (_, index) => {
+    const month = addMonths(start, index);
+
+    return {
+      key: `${month.getFullYear()}-${month.getMonth()}`,
+      label: formatShortMonth(locale, month),
+      volumeKg: getLiftVolumeInRange(entries, month, addMonths(month, 1)),
+    };
+  });
+}
+
+function getTopLiftExercises(entries: LiftEntry[]): LiftExerciseSummary[] {
+  const summaries = new Map<string, LiftExerciseSummary>();
+
+  entries.forEach((entry) => {
+    const key = entry.exerciseId ?? entry.exerciseName.toLowerCase();
+    const current = summaries.get(key) ?? {
+      bestEstimatedOneRepMaxKg: 0,
+      exerciseId: entry.exerciseId,
+      exerciseName: entry.exerciseName,
+      sets: 0,
+      volumeKg: 0,
+    };
+
+    summaries.set(key, {
+      ...current,
+      bestEstimatedOneRepMaxKg: Math.max(
+        current.bestEstimatedOneRepMaxKg,
+        entry.estimatedOneRepMaxKg,
+      ),
+      sets: current.sets + 1,
+      volumeKg: current.volumeKg + entry.volumeKg,
+    });
+  });
+
+  return [...summaries.values()].sort((a, b) => b.volumeKg - a.volumeKg).slice(0, 5);
+}
+
 function maxCount(values: Array<{ count: number }>): number {
   return Math.max(1, ...values.map((value) => value.count));
+}
+
+function maxVolume(values: Array<{ volumeKg: number }>): number {
+  return Math.max(1, ...values.map((value) => value.volumeKg));
+}
+
+function formatKg(locale: string, value: number, maximumFractionDigits = 0): string {
+  return `${new Intl.NumberFormat(locale, {
+    maximumFractionDigits,
+    minimumFractionDigits: maximumFractionDigits > 0 ? 1 : 0,
+  }).format(value)} kg`;
 }
 
 function getHeatClass(count: number, isCurrentMonth: boolean): string {
@@ -250,7 +389,40 @@ function BarList({ buckets }: { buckets: PeriodBucket[] }) {
   );
 }
 
-export function StatisticsPage({ sessions }: StatisticsPageProps) {
+function VolumeBarList({
+  buckets,
+  locale,
+}: {
+  buckets: LiftVolumeBucket[];
+  locale: string;
+}) {
+  const topVolume = maxVolume(buckets);
+
+  return (
+    <div className="space-y-3">
+      {buckets.map((bucket) => (
+        <div key={bucket.key} className="grid grid-cols-[4rem_minmax(0,1fr)_5.5rem] items-center gap-3">
+          <p className="truncate text-sm font-semibold text-slate-300">{bucket.label}</p>
+          <div className="h-8 overflow-hidden rounded-md bg-slate-950/80">
+            <div
+              className="flex h-full items-center justify-end rounded-md bg-emerald-300 px-2 text-xs font-black text-emerald-950 transition-all"
+              style={{
+                width: `${Math.max(bucket.volumeKg === 0 ? 0 : 12, (bucket.volumeKg / topVolume) * 100)}%`,
+              }}
+            >
+              {bucket.volumeKg > 0 ? formatKg(locale, bucket.volumeKg) : ""}
+            </div>
+          </div>
+          <p className="text-right text-sm font-bold text-slate-300">
+            {formatKg(locale, bucket.volumeKg)}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function StatisticsPage({ profile, sessions }: StatisticsPageProps) {
   const { language, t } = useI18n();
   const [viewMode, setViewMode] = useState<ViewMode>("weeks");
   const [selectedMonth, setSelectedMonth] = useState(() => monthStart(new Date()));
@@ -271,6 +443,12 @@ export function StatisticsPage({ sessions }: StatisticsPageProps) {
     () => buildYearBuckets(sessionDates, locale, selectedYear),
     [locale, selectedYear, sessionDates],
   );
+  const liftEntries = useMemo(() => getLiftEntries(sessions), [sessions]);
+  const liftYearBuckets = useMemo(
+    () => buildLiftYearBuckets(liftEntries, locale, selectedYear),
+    [liftEntries, locale, selectedYear],
+  );
+  const topLiftExercises = useMemo(() => getTopLiftExercises(liftEntries), [liftEntries]);
 
   const totalWorkouts = sessionDates.length;
   const fullWorkouts = sessions.filter((session) => session.completed).length;
@@ -282,6 +460,25 @@ export function StatisticsPage({ sessions }: StatisticsPageProps) {
   const bestMonth = yearBuckets.reduce((best, bucket) => (bucket.count > best.count ? bucket : best), yearBuckets[0]);
   const weekdayLabels = getWeekdayLabels(locale);
   const selectedYearNumber = selectedYear.getFullYear();
+  const totalLiftVolumeKg = liftEntries.reduce((total, entry) => total + entry.volumeKg, 0);
+  const thisMonthLiftVolumeKg = getLiftVolumeInRange(
+    liftEntries,
+    monthStart(today),
+    addMonths(monthStart(today), 1),
+  );
+  const previousMonthStart = addMonths(monthStart(today), -1);
+  const previousMonthLiftVolumeKg = getLiftVolumeInRange(
+    liftEntries,
+    previousMonthStart,
+    monthStart(today),
+  );
+  const liftVolumeDeltaKg = thisMonthLiftVolumeKg - previousMonthLiftVolumeKg;
+  const bestLiftEntry = liftEntries.reduce<LiftEntry | undefined>(
+    (best, entry) =>
+      !best || entry.estimatedOneRepMaxKg > best.estimatedOneRepMaxKg ? entry : best,
+    undefined,
+  );
+  const latestBodyWeightKg = getLatestBodyWeightKg(profile);
 
   return (
     <section className="space-y-5">
@@ -463,6 +660,98 @@ export function StatisticsPage({ sessions }: StatisticsPageProps) {
             </div>
           </div>
         </aside>
+      </div>
+
+      <div className="panel p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="label">{t("statistics.liftingSection")}</p>
+            <h3 className="text-xl font-bold text-slate-50">{t("statistics.liftingTitle")}</h3>
+            <p className="mt-1 max-w-3xl text-sm text-slate-400">{t("statistics.liftingDescription")}</p>
+          </div>
+          <span className="rounded-md border border-emerald-300/40 bg-emerald-300/10 px-3 py-1 text-sm font-bold text-emerald-100">
+            {t("statistics.liftingExample")}
+          </span>
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            icon={BarChart3}
+            label={t("statistics.totalLifted")}
+            value={formatKg(locale, totalLiftVolumeKg)}
+          />
+          <StatCard
+            icon={CalendarDays}
+            label={t("statistics.liftedThisMonth")}
+            value={formatKg(locale, thisMonthLiftVolumeKg)}
+          />
+          <StatCard
+            icon={CircleGauge}
+            label={t("statistics.monthlyLiftDelta")}
+            value={`${liftVolumeDeltaKg >= 0 ? "+" : ""}${formatKg(locale, liftVolumeDeltaKg)}`}
+          />
+          <StatCard
+            icon={Trophy}
+            label={t("statistics.bestEstimatedOneRepMax")}
+            value={bestLiftEntry ? formatKg(locale, bestLiftEntry.estimatedOneRepMaxKg, 1) : "-"}
+          />
+        </div>
+
+        {liftEntries.length === 0 ? (
+          <div className="mt-4 rounded-md border border-slate-800 bg-slate-950/60 p-4 text-sm text-slate-300">
+            {t("statistics.noLiftingData")}
+          </div>
+        ) : (
+          <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
+            <div className="rounded-md border border-slate-800 bg-slate-950/60 p-4">
+              <div className="mb-4">
+                <p className="label">{t("statistics.liftVolumeByMonth")}</p>
+                <h4 className="text-lg font-bold text-slate-50">{selectedYearNumber}</h4>
+              </div>
+              <VolumeBarList buckets={liftYearBuckets} locale={locale} />
+            </div>
+
+            <aside className="space-y-4">
+              <div className="rounded-md border border-slate-800 bg-slate-950/60 p-4">
+                <p className="label">{t("statistics.topLiftExercises")}</p>
+                <div className="mt-3 space-y-3">
+                  {topLiftExercises.map((exercise) => (
+                    <div key={exercise.exerciseId ?? exercise.exerciseName} className="rounded-md bg-slate-900/80 p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="font-bold text-slate-50">
+                          {translateExerciseName(exercise, language)}
+                        </p>
+                        <span className="rounded-md bg-emerald-300 px-2 py-1 text-xs font-black text-emerald-950">
+                          {formatKg(locale, exercise.volumeKg)}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-slate-400">
+                        {t("statistics.setCount", {
+                          count: exercise.sets,
+                          plural: exercise.sets === 1 ? "" : "s",
+                        })}{" "}
+                        - {t("statistics.bestEstimatedShort")}{" "}
+                        {formatKg(locale, exercise.bestEstimatedOneRepMaxKg, 1)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-md border border-slate-800 bg-slate-950/60 p-4">
+                <p className="label">{t("statistics.formula")}</p>
+                <p className="mt-2 text-sm text-slate-300">
+                  {t("statistics.liftingFormulaNote", {
+                    bodyWeight:
+                      typeof latestBodyWeightKg === "number"
+                        ? formatKg(locale, latestBodyWeightKg, 1)
+                        : t("statistics.bodyWeightUnavailable"),
+                  })}
+                </p>
+              </div>
+            </aside>
+          </div>
+        )}
       </div>
     </section>
   );

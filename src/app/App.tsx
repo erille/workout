@@ -159,7 +159,9 @@ export default function App() {
                   onSaveSession={addSession}
                 />
               )}
-              {currentPage === "statistics" && <StatisticsPage sessions={sessions} />}
+              {currentPage === "statistics" && (
+                <StatisticsPage profile={profile} sessions={sessions} />
+              )}
               {currentPage === "character" && (
                 <CharacterSheet profile={profile} onSaveProfile={updateProfile} />
               )}

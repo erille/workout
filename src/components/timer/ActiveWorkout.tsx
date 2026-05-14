@@ -314,11 +314,13 @@ function WorkoutRunner({
   });
 
   const isRunning =
+    state.phase === "starting" ||
     state.phase === "exercise_time" ||
     state.phase === "exercise_reps" ||
     state.phase === "exercise_distance" ||
     state.phase === "break";
-  const isCountdown = state.phase === "exercise_time" || state.phase === "break";
+  const isCountdown =
+    state.phase === "starting" || state.phase === "exercise_time" || state.phase === "break";
   const completedStepCount =
     (state.currentRound - 1) * plan.steps.length +
     state.currentStepIndex +
@@ -330,8 +332,11 @@ function WorkoutRunner({
     allowWeightAdjust &&
     Boolean(currentStep) &&
     state.phase !== "idle" &&
+    state.phase !== "starting" &&
+    !(state.phase === "paused" && state.previousPhase === "starting") &&
     state.phase !== "stopped" &&
     state.phase !== "completed";
+  const displayedNextStep = state.phase === "starting" ? currentStep : nextStep;
   const voiceProviderLabel =
     settings.voiceProvider === "piper"
       ? t("settings.providerPiper")
@@ -382,7 +387,9 @@ function WorkoutRunner({
           <div className="flex min-h-[23rem] flex-col justify-between rounded-lg border border-slate-800 bg-slate-950/60 p-5">
             <div className="space-y-2">
               <p className="label">
-                {state.phase === "break"
+                {state.phase === "starting"
+                  ? t("timer.getReady")
+                  : state.phase === "break"
                   ? t("common.break")
                   : state.phase === "paused"
                     ? t("common.paused")
@@ -391,7 +398,9 @@ function WorkoutRunner({
                       : t("common.exercise")}
               </p>
               <h3 className="break-words text-3xl font-black text-slate-50 sm:text-4xl">
-                {state.phase === "break"
+                {state.phase === "starting"
+                  ? t("timer.getReady")
+                  : state.phase === "break"
                   ? t("timer.recover")
                   : currentStep
                     ? translateExerciseName(currentStep, language)
@@ -400,6 +409,8 @@ function WorkoutRunner({
               <p className="text-base text-slate-400">
                 {state.phase === "idle"
                   ? t("timer.ready")
+                  : state.phase === "starting"
+                    ? describeStep(currentStep, t("timer.noNext"), language)
                   : state.phase === "stopped"
                     ? t("timer.stopped")
                     : describeStep(currentStep, t("timer.noNext"), language, {
@@ -480,7 +491,7 @@ function WorkoutRunner({
             <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-4">
               <p className="label">{t("timer.next")}</p>
               <p className="mt-2 text-lg font-semibold text-slate-50">
-                {describeStep(nextStep, t("timer.noNext"), language)}
+                {describeStep(displayedNextStep, t("timer.noNext"), language)}
               </p>
             </div>
             <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-4">

@@ -16,6 +16,7 @@ import { cancelSpeech, prepareSpeech, speak } from "../services/speechService";
 
 export type TimerPhase =
   | "idle"
+  | "starting"
   | "exercise_time"
   | "exercise_reps"
   | "exercise_distance"
@@ -48,6 +49,8 @@ type CompletedStepRecord = {
   step: WorkoutSessionStep;
 };
 
+const START_DELAY_SECONDS = 3;
+
 function createInitialState(plan: WorkoutPlan): WorkoutRuntimeState {
   return {
     phase: "idle",
@@ -59,7 +62,7 @@ function createInitialState(plan: WorkoutPlan): WorkoutRuntimeState {
 }
 
 function isCountdownPhase(phase: TimerPhase): boolean {
-  return phase === "exercise_time" || phase === "break";
+  return phase === "starting" || phase === "exercise_time" || phase === "break";
 }
 
 function createStepKey(round: number, stepIndex: number): string {
@@ -339,7 +342,9 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
       targetEndTimeRef.current = null;
       const current = stateRef.current;
 
-      if (current.phase === "exercise_time") {
+      if (current.phase === "starting") {
+        beginStep(1, 0, new Date().toISOString());
+      } else if (current.phase === "exercise_time") {
         moveToBreak(current.currentRound, current.currentStepIndex);
       } else if (current.phase === "break") {
         advanceAfterBreak(current.currentRound, current.currentStepIndex);
@@ -349,26 +354,26 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
     tick();
     const intervalId = window.setInterval(tick, 250);
     return () => window.clearInterval(intervalId);
-  }, [advanceAfterBreak, moveToBreak, state.currentRound, state.currentStepIndex, state.phase]);
+  }, [advanceAfterBreak, beginStep, moveToBreak, state.currentRound, state.currentStepIndex, state.phase]);
 
   const startWorkout = useCallback(() => {
     if (plan.steps.length === 0) {
       return;
     }
 
-    const startedAt = new Date().toISOString();
     completedStepKeysRef.current = new Set();
     completedStepRecordsRef.current = [];
     runtimeWeightsRef.current = {};
+    targetEndTimeRef.current = Date.now() + START_DELAY_SECONDS * 1000;
     setRuntimeWeights({});
     sessionSavedRef.current = false;
     setCompletedSession(null);
     setState({
       ...createInitialState(plan),
-      startedAt,
+      phase: "starting",
+      remainingSeconds: START_DELAY_SECONDS,
     });
-    beginStep(1, 0, startedAt);
-  }, [beginStep, plan]);
+  }, [plan]);
 
   const pauseWorkout = useCallback(() => {
     const current = stateRef.current;
@@ -377,7 +382,8 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
       current.phase !== "exercise_time" &&
       current.phase !== "exercise_reps" &&
       current.phase !== "exercise_distance" &&
-      current.phase !== "break"
+      current.phase !== "break" &&
+      current.phase !== "starting"
     ) {
       return;
     }

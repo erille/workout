@@ -5,6 +5,7 @@ import { ExerciseLibrary } from "../components/exercises/ExerciseLibrary";
 import { WorkoutHistory } from "../components/history/WorkoutHistory";
 import { Navigation, type PageId } from "../components/layout/Navigation";
 import { SettingsPage } from "../components/settings/Settings";
+import { StatisticsPage } from "../components/statistics/StatisticsPage";
 import { ActiveWorkout } from "../components/timer/ActiveWorkout";
 import { WorkoutBuilder } from "../components/workout-builder/WorkoutBuilder";
 import { useExercises } from "../hooks/useExercises";
@@ -158,6 +159,7 @@ export default function App() {
                   onSaveSession={addSession}
                 />
               )}
+              {currentPage === "statistics" && <StatisticsPage sessions={sessions} />}
               {currentPage === "character" && (
                 <CharacterSheet profile={profile} onSaveProfile={updateProfile} />
               )}

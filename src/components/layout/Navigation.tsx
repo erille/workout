@@ -7,6 +7,7 @@ import {
   ListChecks,
   LogIn,
   LogOut,
+  BarChart3,
   Settings,
   Timer,
   UserRound,
@@ -17,7 +18,14 @@ import type { TranslationKey } from "../../i18n/translations";
 import { useI18n } from "../../i18n/I18nContext";
 import type { StorageMode } from "../../data/storage";
 
-export type PageId = "exercises" | "builder" | "timer" | "history" | "character" | "settings";
+export type PageId =
+  | "exercises"
+  | "builder"
+  | "timer"
+  | "history"
+  | "statistics"
+  | "character"
+  | "settings";
 
 type NavigationProps = {
   authEnabled: boolean;
@@ -36,6 +44,7 @@ const navItems = [
   { id: "builder", labelKey: "nav.builder", icon: ListChecks },
   { id: "timer", labelKey: "nav.timer", icon: Timer },
   { id: "history", labelKey: "nav.history", icon: History },
+  { id: "statistics", labelKey: "nav.statistics", icon: BarChart3 },
   { id: "character", labelKey: "nav.character", icon: UserRound },
   { id: "settings", labelKey: "nav.settings", icon: Settings },
 ] satisfies Array<{ id: PageId; labelKey: TranslationKey; icon: typeof Dumbbell }>;

@@ -563,7 +563,14 @@ export function WorkoutBuilder({
   };
 
   return (
-    <section className="grid gap-6 xl:grid-cols-[19rem_minmax(0,1fr)]">
+    <section className="space-y-5">
+      <div>
+        <p className="label">{t("builder.section")}</p>
+        <h2 className="text-2xl font-bold text-slate-50">{t("builder.title")}</h2>
+        <p className="mt-1 max-w-2xl text-sm text-slate-400">{t("builder.description")}</p>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[19rem_minmax(0,1fr)]">
       <aside className="space-y-4">
         <div className="panel p-4">
           <div className="flex items-center justify-between gap-3">
@@ -899,6 +906,7 @@ export function WorkoutBuilder({
           )}
         </div>
       </form>
+      </div>
     </section>
   );
 }

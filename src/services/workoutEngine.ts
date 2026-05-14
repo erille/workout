@@ -7,6 +7,7 @@ import { createId } from "../utils/id";
 const voiceTemplates: Record<
   Language,
   {
+    ready: string[];
     time: string[];
     reps: string[];
     distance: string[];
@@ -15,6 +16,7 @@ const voiceTemplates: Record<
   }
 > = {
   en: {
+    ready: ["Get ready!"],
     time: [
       "Next, {exercise} for {duration} seconds.",
       "Let's go. {exercise}, {duration} seconds.",
@@ -42,6 +44,7 @@ const voiceTemplates: Record<
     ],
   },
   fr: {
+    ready: ["Prepare-toi !"],
     time: [
       "Prochain exercice, {exercise} pendant {duration} secondes.",
       "On y va. {exercise}, {duration} secondes.",
@@ -101,6 +104,10 @@ export function getBreakAnnouncement(breakSeconds: number, language: Language): 
 
 export function getCompleteAnnouncement(language: Language): string {
   return pickTemplate(voiceTemplates[language].complete, Date.now());
+}
+
+export function getReadyAnnouncement(language: Language): string {
+  return pickTemplate(voiceTemplates[language].ready, 0);
 }
 
 export function getNextStep(

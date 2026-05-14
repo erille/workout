@@ -9,6 +9,7 @@ import {
   getBreakAnnouncement,
   getCompleteAnnouncement,
   getNextStep,
+  getReadyAnnouncement,
   getStepAnnouncement,
 } from "../services/workoutEngine";
 import { cancelAudioCues, playAudioCue, type AudioCueType } from "../services/audioCueService";
@@ -49,7 +50,7 @@ type CompletedStepRecord = {
   step: WorkoutSessionStep;
 };
 
-const START_DELAY_SECONDS = 3;
+const START_DELAY_SECONDS = 5;
 
 function createInitialState(plan: WorkoutPlan): WorkoutRuntimeState {
   return {
@@ -89,6 +90,7 @@ function resolveVoiceLanguage(settings: AppSettings): Language {
 
 function getWorkoutSpeechTexts(plan: WorkoutPlan, language: Language): string[] {
   return [
+    getReadyAnnouncement(language),
     ...plan.steps.flatMap((step) => [
       getStepAnnouncement(step, language),
       ...(step.breakSeconds > 0 ? [getBreakAnnouncement(step.breakSeconds, language)] : []),
@@ -405,12 +407,15 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
     setCompletedStepsCount(0);
     sessionSavedRef.current = false;
     setCompletedSession(null);
+    cancelSpeech();
+    cancelAudioCues();
+    notify("work", getReadyAnnouncement(voiceLanguage));
     setState({
       ...createInitialState(plan),
       phase: "starting",
       remainingSeconds: START_DELAY_SECONDS,
     });
-  }, [plan]);
+  }, [notify, plan, voiceLanguage]);
 
   const pauseWorkout = useCallback(() => {
     const current = stateRef.current;

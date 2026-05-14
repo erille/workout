@@ -119,7 +119,7 @@ export const defaultSettings = {
   voiceEnabled: true,
   notificationMode: "voice",
   voiceProvider: "piper",
-  voiceLanguage: "app",
+  voiceLanguage: "fr",
   voiceRate: 1,
   voicePitch: 1,
   voiceVolume: 1,

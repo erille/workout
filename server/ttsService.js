@@ -27,7 +27,7 @@ const pendingGenerations = new Map();
 mkdirSync(cacheDir, { recursive: true });
 
 function normalizeLanguage(language) {
-  return language === "fr" ? "fr" : "en";
+  return language === "en" ? "en" : "fr";
 }
 
 function normalizeText(text) {

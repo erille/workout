@@ -137,7 +137,7 @@ async function playServerSpeech(
   options: SpeakOptions | undefined,
   requestId: number,
 ): Promise<void> {
-  const language = options?.language ?? "en";
+  const language = options?.language ?? "fr";
   const serverSpeech = await requestServerSpeech(text, language);
 
   if (requestId !== speechRequestId) {
@@ -200,7 +200,7 @@ export function prepareSpeech(texts: string[], options?: SpeakOptions): void {
     return;
   }
 
-  const language = options.language ?? "en";
+  const language = options.language ?? "fr";
   const uniqueTexts = [...new Set(texts.map((text) => text.trim()).filter(Boolean))];
 
   uniqueTexts.forEach((text) => {

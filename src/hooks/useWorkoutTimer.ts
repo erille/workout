@@ -100,6 +100,7 @@ function getWorkoutSpeechTexts(plan: WorkoutPlan, language: Language): string[] 
 export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerOptions) {
   const [state, setState] = useState<WorkoutRuntimeState>(() => createInitialState(plan));
   const [completedSession, setCompletedSession] = useState<WorkoutSession | null>(null);
+  const [completedStepsCount, setCompletedStepsCount] = useState(0);
   const [runtimeWeights, setRuntimeWeights] = useState<RuntimeWeightMap>({});
   const stateRef = useRef(state);
   const runtimeWeightsRef = useRef<RuntimeWeightMap>({});
@@ -120,6 +121,7 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
     completedStepRecordsRef.current = [];
     sessionSavedRef.current = false;
     setRuntimeWeights({});
+    setCompletedStepsCount(0);
     setCompletedSession(null);
     setState(createInitialState(plan));
     cancelSpeech();
@@ -175,6 +177,7 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
       }
 
       completedStepKeysRef.current.add(key);
+      setCompletedStepsCount((count) => count + 1);
       completedStepRecordsRef.current = [
         ...completedStepRecordsRef.current,
         {
@@ -218,6 +221,39 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
     notify("complete", getCompleteAnnouncement(voiceLanguage));
     void onComplete(session);
   }, [notify, onComplete, plan, voiceLanguage]);
+
+  const finishPartialWorkout = useCallback(() => {
+    if (sessionSavedRef.current || completedStepRecordsRef.current.length === 0) {
+      return;
+    }
+
+    const current = stateRef.current;
+    const completedAt = new Date().toISOString();
+    const startedAt = current.startedAt ?? completedAt;
+    const completedSteps = completedStepRecordsRef.current.map((record) => record.step);
+    const roundsCompleted = completedSteps.reduce(
+      (maxRound, step) => Math.max(maxRound, step.round),
+      1,
+    );
+    const session = createWorkoutSession(plan, startedAt, completedAt, completedSteps, {
+      completed: false,
+      roundsCompleted,
+    });
+
+    sessionSavedRef.current = true;
+    targetEndTimeRef.current = null;
+    cancelSpeech();
+    cancelAudioCues();
+    setCompletedSession(session);
+    setState({
+      ...current,
+      phase: "completed",
+      previousPhase: undefined,
+      remainingSeconds: 0,
+      completedAt,
+    });
+    void onComplete(session);
+  }, [onComplete, plan]);
 
   const beginStep = useCallback(
     (round: number, stepIndex: number, startedAt?: string) => {
@@ -366,6 +402,7 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
     runtimeWeightsRef.current = {};
     targetEndTimeRef.current = Date.now() + START_DELAY_SECONDS * 1000;
     setRuntimeWeights({});
+    setCompletedStepsCount(0);
     sessionSavedRef.current = false;
     setCompletedSession(null);
     setState({
@@ -482,12 +519,14 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
     state,
     currentStep,
     currentStepWeight,
+    completedStepsCount,
     nextStep,
     completedSession,
     startWorkout,
     pauseWorkout,
     resumeWorkout,
     stopWorkout,
+    finishPartialWorkout,
     completeRepsStep,
     updateCurrentStepWeight,
   };

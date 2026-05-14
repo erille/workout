@@ -144,6 +144,10 @@ export function createWorkoutSession(
   startedAt: string,
   completedAt: string,
   steps: WorkoutSessionStep[],
+  options?: {
+    completed?: boolean;
+    roundsCompleted?: number;
+  },
 ): WorkoutSession {
   return {
     id: createId("session"),
@@ -151,8 +155,8 @@ export function createWorkoutSession(
     workoutName: plan.name,
     startedAt,
     completedAt,
-    completed: true,
-    roundsCompleted: plan.rounds,
+    completed: options?.completed ?? true,
+    roundsCompleted: options?.roundsCompleted ?? plan.rounds,
     steps,
   };
 }

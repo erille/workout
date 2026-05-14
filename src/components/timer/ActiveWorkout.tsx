@@ -1,4 +1,4 @@
-import { Check, Pause, Play, RotateCcw, Square, TimerReset } from "lucide-react";
+import { Check, Pause, Play, RotateCcw, Save, Square, TimerReset } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import {
   defaultQuickTimerSettings,
@@ -255,6 +255,7 @@ function QuickTimerSetup({ onStart }: { onStart: (plan: WorkoutPlan) => void }) 
 
 function SessionSummary({ session }: { session: WorkoutSession }) {
   const { language, t } = useI18n();
+  const isComplete = session.completed;
 
   return (
     <div className="panel p-4">
@@ -266,9 +267,16 @@ function SessionSummary({ session }: { session: WorkoutSession }) {
             {formatDateTime(session.startedAt)} -{" "}
             {formatSeconds(getElapsedSeconds(session.startedAt, session.completedAt))}
           </p>
+          {!isComplete ? (
+            <p className="mt-2 text-sm font-medium text-amber-100">{t("timer.partialSaved")}</p>
+          ) : null}
         </div>
-        <span className="rounded-md bg-emerald-400 px-3 py-1 text-sm font-bold text-emerald-950">
-          {t("common.saved")}
+        <span
+          className={`rounded-md px-3 py-1 text-sm font-bold ${
+            isComplete ? "bg-emerald-400 text-emerald-950" : "bg-amber-300 text-amber-950"
+          }`}
+        >
+          {isComplete ? t("common.saved") : t("history.partial")}
         </span>
       </div>
 
@@ -389,9 +397,11 @@ function WorkoutRunner({
   const { language, t } = useI18n();
   const {
     completedSession,
+    completedStepsCount,
     completeRepsStep,
     currentStep,
     currentStepWeight,
+    finishPartialWorkout,
     nextStep,
     pauseWorkout,
     resumeWorkout,
@@ -413,6 +423,8 @@ function WorkoutRunner({
     state.phase === "break";
   const isCountdown =
     state.phase === "starting" || state.phase === "exercise_time" || state.phase === "break";
+  const canFinishPartial =
+    saveSession && completedStepsCount > 0 && (isRunning || state.phase === "paused");
   const completedStepCount =
     (state.currentRound - 1) * plan.steps.length +
     state.currentStepIndex +
@@ -538,7 +550,7 @@ function WorkoutRunner({
               )}
             </div>
 
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
               {(state.phase === "idle" || state.phase === "stopped" || state.phase === "completed") && (
                 <button type="button" className="primary-button min-h-14" onClick={startWorkout}>
                   {state.phase === "completed" ? (
@@ -565,6 +577,12 @@ function WorkoutRunner({
                 <button type="button" className="primary-button min-h-14" onClick={completeRepsStep}>
                   <Check aria-hidden="true" size={20} />
                   {t("timer.done")}
+                </button>
+              ) : null}
+              {canFinishPartial ? (
+                <button type="button" className="secondary-button min-h-14" onClick={finishPartialWorkout}>
+                  <Save aria-hidden="true" size={19} />
+                  {t("timer.finishHere")}
                 </button>
               ) : null}
               {(isRunning || state.phase === "paused") ? (

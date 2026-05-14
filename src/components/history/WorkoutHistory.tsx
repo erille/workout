@@ -356,7 +356,7 @@ export function WorkoutHistory({
       workoutName,
       startedAt: startedAt.toISOString(),
       completedAt: completedAt.toISOString(),
-      completed: true,
+      completed: existingSession?.completed ?? true,
       roundsCompleted,
       steps,
     };
@@ -711,9 +711,16 @@ export function WorkoutHistory({
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <p className="label">{formatDateTime(session.startedAt)}</p>
-                  <h3 className="text-xl font-bold text-slate-50">{session.workoutName}</h3>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-xl font-bold text-slate-50">{session.workoutName}</h3>
+                    {!session.completed ? (
+                      <span className="rounded-md bg-amber-300 px-2 py-1 text-xs font-bold text-amber-950">
+                        {t("history.partial")}
+                      </span>
+                    ) : null}
+                  </div>
                   <p className="text-sm text-slate-400">
-                    {t("history.completedSteps", {
+                    {t(session.completed ? "history.completedSteps" : "history.partialSteps", {
                       rounds: session.roundsCompleted,
                       roundPlural: session.roundsCompleted === 1 ? "" : "s",
                       steps: session.steps.length,

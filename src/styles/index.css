@@ -45,6 +45,23 @@ textarea:focus-visible {
   outline-offset: 2px;
 }
 
+@keyframes current-step-flash {
+  0%,
+  100% {
+    background-color: rgba(34, 211, 238, 0.15);
+    border-color: rgba(103, 232, 249, 0.95);
+    box-shadow: 0 0 0 rgba(34, 211, 238, 0);
+  }
+
+  50% {
+    background-color: rgba(34, 211, 238, 0.34);
+    border-color: rgba(165, 243, 252, 1);
+    box-shadow:
+      0 0 0 4px rgba(34, 211, 238, 0.12),
+      0 0 28px rgba(34, 211, 238, 0.24);
+  }
+}
+
 @layer components {
   .panel {
     @apply rounded-lg border border-slate-700/80 bg-slate-900/70 shadow-glow;
@@ -68,5 +85,9 @@ textarea:focus-visible {
 
   .danger-button {
     @apply inline-flex items-center justify-center gap-2 rounded-md border border-rose-500/60 bg-rose-500/10 px-4 py-2 text-sm font-semibold text-rose-100 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .current-step-flash {
+    animation: current-step-flash 0.45s ease-in-out 3;
   }
 }

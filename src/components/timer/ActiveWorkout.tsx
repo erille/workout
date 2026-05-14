@@ -54,6 +54,21 @@ function describeStep(
   return `${translateExerciseName(step, language)} - ${target}${weight}`;
 }
 
+function getStepTarget(
+  step: WorkoutStep,
+  labels: { reps: string; meters: string },
+): string {
+  if (step.type === "time") {
+    return `${step.durationSeconds}s`;
+  }
+
+  if (step.type === "distance") {
+    return `${step.distanceMeters} ${labels.meters}`;
+  }
+
+  return `${step.reps} ${labels.reps}`;
+}
+
 function parseOptionalWeight(value: string): number | undefined {
   const parsed = Number(value);
 
@@ -279,6 +294,83 @@ function SessionSummary({ session }: { session: WorkoutSession }) {
   );
 }
 
+function WorkoutOrder({
+  activeStepIndex,
+  activeStepKey,
+  currentRound,
+  language,
+  plan,
+}: {
+  activeStepIndex: number;
+  activeStepKey: string;
+  currentRound: number;
+  language: Language;
+  plan: WorkoutPlan;
+}) {
+  const { t } = useI18n();
+
+  return (
+    <div className="panel p-4">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="label">{t("timer.order")}</p>
+          <h3 className="text-xl font-bold text-slate-50">{plan.name}</h3>
+        </div>
+        <p className="text-sm text-slate-400">
+          {t("common.round")} {Math.min(currentRound, plan.rounds)} / {plan.rounds}
+        </p>
+      </div>
+
+      <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+        {plan.steps.map((step, index) => {
+          const isActive = index === activeStepIndex;
+          const isPast = activeStepIndex > index;
+          const target = getStepTarget(step, {
+            meters: t("common.meters"),
+            reps: t("common.reps"),
+          });
+
+          return (
+            <div
+              key={isActive ? `${step.id}-${activeStepKey}` : step.id}
+              className={`rounded-md border p-3 transition ${
+                isActive
+                  ? "current-step-flash border-cyan-300 bg-cyan-300/15 shadow-glow"
+                  : isPast
+                    ? "border-slate-800 bg-slate-950/45 text-slate-400"
+                    : "border-slate-800 bg-slate-950/70 text-slate-300"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase text-cyan-200">
+                    {t("builder.step", { number: index + 1 })}
+                  </p>
+                  <h4 className="break-words text-base font-bold text-slate-50">
+                    {translateExerciseName(step, language)}
+                  </h4>
+                </div>
+                {isActive ? (
+                  <span className="rounded-md bg-cyan-300 px-2 py-1 text-xs font-bold text-slate-950">
+                    {t("timer.currentStep")}
+                  </span>
+                ) : null}
+              </div>
+              <p className="mt-2 text-sm text-slate-300">
+                {target}
+                {typeof step.weight === "number" ? ` - ${step.weight} kg` : ""}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                {t("common.break")}: {formatSeconds(step.breakSeconds)}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function WorkoutRunner({
   plan,
   settings,
@@ -328,6 +420,11 @@ function WorkoutRunner({
   const totalStepCount = plan.steps.length * plan.rounds;
   const progressPercent =
     totalStepCount === 0 ? 0 : Math.min(100, Math.round((completedStepCount / totalStepCount) * 100));
+  const activeStepIndex =
+    state.phase === "idle" || state.phase === "stopped" || state.phase === "completed"
+      ? -1
+      : state.currentStepIndex;
+  const activeStepKey = `${state.currentRound}:${activeStepIndex}`;
   const canAdjustWeight =
     allowWeightAdjust &&
     Boolean(currentStep) &&
@@ -526,6 +623,14 @@ function WorkoutRunner({
           </aside>
         </div>
       </div>
+
+      <WorkoutOrder
+        activeStepIndex={activeStepIndex}
+        activeStepKey={activeStepKey}
+        currentRound={state.currentRound}
+        language={language}
+        plan={plan}
+      />
 
       {completedSession && saveSession ? <SessionSummary session={completedSession} /> : null}
       {completedSession && !saveSession ? (

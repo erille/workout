@@ -28,6 +28,8 @@ type ExerciseFormState = {
   createdAt?: string;
 };
 
+type FormPlacement = "add-popover" | "edit-dialog";
+
 const emptyForm: ExerciseFormState = {
   name: "",
   category: "push",
@@ -69,6 +71,7 @@ export function ExerciseLibrary({
   const [query, setQuery] = useState("");
   const [form, setForm] = useState<ExerciseFormState>(emptyForm);
   const [error, setError] = useState<string | null>(null);
+  const [formPlacement, setFormPlacement] = useState<FormPlacement>("add-popover");
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const formPopoverRef = useRef<HTMLDivElement>(null);
@@ -104,12 +107,14 @@ export function ExerciseLibrary({
 
   const openAddForm = () => {
     resetForm();
+    setFormPlacement("add-popover");
     setIsFormOpen(true);
   };
 
   const openEditForm = (exercise: Exercise) => {
     setForm(toFormState(exercise));
     setError(null);
+    setFormPlacement("edit-dialog");
     setIsFormOpen(true);
   };
 
@@ -119,6 +124,10 @@ export function ExerciseLibrary({
     }
 
     const handlePointerDown = (event: PointerEvent) => {
+      if (formPlacement === "edit-dialog") {
+        return;
+      }
+
       if (!formPopoverRef.current?.contains(event.target as Node)) {
         closeForm();
       }
@@ -136,7 +145,7 @@ export function ExerciseLibrary({
       document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isFormOpen]);
+  }, [formPlacement, isFormOpen]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -369,7 +378,7 @@ export function ExerciseLibrary({
               <Plus aria-hidden="true" size={17} />
               {t("exercises.addExercise")}
             </button>
-            {isFormOpen ? (
+            {isFormOpen && formPlacement === "add-popover" ? (
               <div className="fixed inset-x-4 top-24 z-30 max-h-[calc(100vh-7rem)] overflow-y-auto rounded-lg border border-slate-700 bg-slate-900 p-4 shadow-2xl sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-2 sm:w-96">
                 <span className="absolute -top-1 right-8 hidden h-2 w-2 rotate-45 border-l border-t border-slate-700 bg-slate-900 sm:block" />
                 {exerciseForm}
@@ -378,6 +387,14 @@ export function ExerciseLibrary({
           </div>
         </div>
       </div>
+
+      {isFormOpen && formPlacement === "edit-dialog" ? (
+        <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-slate-950/70 px-4 py-8 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-lg border border-slate-700 bg-slate-900 p-4 shadow-2xl">
+            {exerciseForm}
+          </div>
+        </div>
+      ) : null}
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {filteredExercises.map((exercise) => (

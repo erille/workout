@@ -15,16 +15,21 @@ Workout is a local-first web app for building, running, and tracking workout ses
 
 - Exercise library with add, edit, delete, categories, notes, and defaults.
 - Drag-and-drop workout builder.
-- Timed and repetition-based workout steps.
+- Timed, repetition-based, and distance-based workout steps.
 - Optional per-step weight tracking.
-- Rounds, breaks, active timer, pause, resume, stop, and completion flow.
-- Completed workout history with workout/exercise filtering.
+- Rounds, breaks, 5-second get-ready countdown, active timer, pause, resume, stop, partial save, and completion flow.
+- Quick interval timer with saved last-used work/rest/round settings.
+- Completed workout history with manual entry, workout/exercise filtering, and partial session tracking.
+- Statistics page with weekly/monthly/yearly workout counts and a first lifting-progress view for weighted reps.
 - English and French interface.
 - Audio modes for local Piper TTS, browser voice, beeps, and silent workouts.
 - Separate app language and spoken announcement language.
+- Character page with built-in avatars or an uploaded photo.
 - Guest mode using browser localStorage.
+- Local mode JSON export/import for moving browser data between devices.
 - Private mode using SQLite through the Node API.
 - Password login with Argon2 hash support.
+- PWA install support with basic static app-shell caching.
 - Docker deployment on port `8060`.
 
 ## Data Modes
@@ -39,6 +44,8 @@ Workout has two separated storage modes:
 
 Guest/local data is not automatically imported into the private database. This keeps visitor experiments separate from the owner database.
 
+Local mode includes JSON export/import from the top navigation so browser-only data can be backed up or moved to another browser.
+
 ## Tech Stack
 
 - React 18
@@ -50,6 +57,8 @@ Guest/local data is not automatically imported into the private database. This k
 - Node 22
 - SQLite via `node:sqlite`
 - Argon2 password verification
+- Piper TTS with cached generated audio
+- Web app manifest and service worker
 - Docker Compose
 
 ## Quick Start
@@ -148,6 +157,8 @@ The production container:
 - Generates and caches Piper TTS audio in `/data/tts-cache`.
 - Exposes port `8060`.
 
+The first Docker build downloads Piper and the bundled English/French voice models, so that build can take longer than later rebuilds.
+
 Start or rebuild:
 
 ```bash
@@ -242,8 +253,7 @@ This site uses Workout, a project by Ketah.
 
 ## Roadmap
 
-- Progress charts for weight and volume.
-- Import/export JSON.
-- PWA/offline install support.
+- Deeper lifting analytics and body-weight-aware calculations.
+- Better generated audio cache management.
 - More workout templates.
 - Optional richer voice engine.

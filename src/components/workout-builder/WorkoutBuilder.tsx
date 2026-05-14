@@ -15,7 +15,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Plus, Play, Save, Trash2 } from "lucide-react";
+import { Copy, GripVertical, Plus, Play, Save, Trash2 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useI18n } from "../../i18n/I18nContext";
 import { translateExerciseName } from "../../i18n/exerciseNames";
@@ -61,6 +61,29 @@ function clonePlanToDraft(plan: WorkoutPlan): DraftPlan {
     steps: plan.steps,
     createdAt: plan.createdAt,
   };
+}
+
+function createDuplicatePlanName(
+  baseName: string,
+  plans: WorkoutPlan[],
+  copyLabel: string,
+): string {
+  const existingNames = new Set(plans.map((plan) => plan.name.trim().toLowerCase()));
+  const firstCopyName = `${baseName} ${copyLabel}`.trim();
+
+  if (!existingNames.has(firstCopyName.toLowerCase())) {
+    return firstCopyName;
+  }
+
+  let copyNumber = 2;
+  let nextName = `${firstCopyName} ${copyNumber}`;
+
+  while (existingNames.has(nextName.toLowerCase())) {
+    copyNumber += 1;
+    nextName = `${firstCopyName} ${copyNumber}`;
+  }
+
+  return nextName;
 }
 
 function createStepFromExercise(
@@ -518,6 +541,27 @@ export function WorkoutBuilder({
     }
   };
 
+  const duplicatePlan = async (plan: WorkoutPlan) => {
+    const now = new Date().toISOString();
+    const duplicate: WorkoutPlan = {
+      ...plan,
+      id: createId("plan"),
+      name: createDuplicatePlanName(plan.name, plans, t("builder.copySuffix")),
+      steps: plan.steps.map((step) => ({
+        ...step,
+        id: createId("step"),
+      })),
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    setError(null);
+    setMessage(null);
+    await onSavePlan(duplicate);
+    setDraft(clonePlanToDraft(duplicate));
+    setMessage(t("builder.duplicated", { name: duplicate.name }));
+  };
+
   return (
     <section className="grid gap-6 xl:grid-cols-[19rem_minmax(0,1fr)]">
       <aside className="space-y-4">
@@ -561,18 +605,30 @@ export function WorkoutBuilder({
                         {plan.rounds === 1 ? "" : "s"}
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      className="danger-button px-2 py-2"
-                      aria-label={`Delete ${plan.name}`}
-                      onClick={() => {
-                        if (window.confirm(t("builder.deletePlan", { name: plan.name }))) {
-                          void onDeletePlan(plan.id);
-                        }
-                      }}
-                    >
-                      <Trash2 aria-hidden="true" size={15} />
-                    </button>
+                    <div className="flex shrink-0 gap-2">
+                      <button
+                        type="button"
+                        className="secondary-button px-2 py-2"
+                        aria-label={t("builder.duplicatePlan", { name: plan.name })}
+                        onClick={() => {
+                          void duplicatePlan(plan);
+                        }}
+                      >
+                        <Copy aria-hidden="true" size={15} />
+                      </button>
+                      <button
+                        type="button"
+                        className="danger-button px-2 py-2"
+                        aria-label={`Delete ${plan.name}`}
+                        onClick={() => {
+                          if (window.confirm(t("builder.deletePlan", { name: plan.name }))) {
+                            void onDeletePlan(plan.id);
+                          }
+                        }}
+                      >
+                        <Trash2 aria-hidden="true" size={15} />
+                      </button>
+                    </div>
                   </div>
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     <button

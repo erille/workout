@@ -5,6 +5,7 @@ import { dirname, extname, join, resolve, sep } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import argon2 from "argon2";
 import { defaultExercises, defaultProfile, defaultSettings } from "./defaultData.js";
+import { createTtsAudio, getTtsStatus, streamTtsAudio } from "./ttsService.js";
 
 function loadDotEnv() {
   const envPath = resolve(".env");
@@ -290,11 +291,16 @@ function readSettings() {
   const notificationMode =
     savedSettings.notificationMode ??
     (savedSettings.voiceEnabled === false ? "off" : defaultSettings.notificationMode);
+  const voiceProvider =
+    savedSettings.voiceProvider === "browser" || savedSettings.voiceProvider === "piper"
+      ? savedSettings.voiceProvider
+      : defaultSettings.voiceProvider;
 
   return {
     ...defaultSettings,
     ...savedSettings,
     notificationMode,
+    voiceProvider,
     voiceEnabled: notificationMode === "voice",
   };
 }
@@ -307,6 +313,10 @@ function writeSettings(settings) {
   const notificationMode =
     settings.notificationMode ??
     (settings.voiceEnabled === false ? "off" : defaultSettings.notificationMode);
+  const voiceProvider =
+    settings.voiceProvider === "browser" || settings.voiceProvider === "piper"
+      ? settings.voiceProvider
+      : defaultSettings.voiceProvider;
 
   db.prepare(
     `INSERT INTO settings (id, data, updated_at)
@@ -316,6 +326,7 @@ function writeSettings(settings) {
     ...defaultSettings,
     ...settings,
     notificationMode,
+    voiceProvider,
     voiceEnabled: notificationMode === "voice",
   }), new Date().toISOString());
 }
@@ -418,6 +429,25 @@ async function handleApi(request, response, pathname) {
     return;
   }
 
+  if (request.method === "GET" && pathname === "/api/tts/status") {
+    jsonResponse(response, 200, getTtsStatus());
+    return;
+  }
+
+  if (request.method === "POST" && pathname === "/api/tts") {
+    jsonResponse(response, 200, await createTtsAudio(await readBody(request)));
+    return;
+  }
+
+  const ttsAudioMatch = pathname.match(/^\/api\/tts\/audio\/([^/]+)$/);
+
+  if (request.method === "GET" && ttsAudioMatch) {
+    if (!streamTtsAudio(ttsAudioMatch[1], response)) {
+      jsonResponse(response, 404, { error: "Audio not found" });
+    }
+    return;
+  }
+
   if (request.method === "POST" && pathname === "/api/import") {
     writeAllData(await readBody(request));
     jsonResponse(response, 200, readAllData());
@@ -455,6 +485,7 @@ const contentTypes = {
   ".png": "image/png",
   ".svg": "image/svg+xml",
   ".txt": "text/plain; charset=utf-8",
+  ".wav": "audio/wav",
 };
 
 function serveStatic(response, pathname) {

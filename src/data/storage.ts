@@ -1,7 +1,12 @@
 import { defaultExercises } from "./defaultExercises";
 import type { Exercise } from "../models/exercise";
 import { defaultProfile, type CharacterProfile } from "../models/profile";
-import { defaultSettings, type AppSettings, type NotificationMode } from "../models/settings";
+import {
+  defaultSettings,
+  type AppSettings,
+  type NotificationMode,
+  type VoiceProvider,
+} from "../models/settings";
 import type { WorkoutSession } from "../models/session";
 import type { WorkoutPlan } from "../models/workout";
 
@@ -158,11 +163,16 @@ function normalizeNotificationMode(settings?: Partial<AppSettings>): Notificatio
 
 function normalizeSettings(settings?: Partial<AppSettings>): AppSettings {
   const notificationMode = normalizeNotificationMode(settings);
+  const voiceProvider: VoiceProvider =
+    settings?.voiceProvider === "browser" || settings?.voiceProvider === "piper"
+      ? settings.voiceProvider
+      : defaultSettings.voiceProvider;
 
   return {
     ...defaultSettings,
     ...settings,
     notificationMode,
+    voiceProvider,
     voiceEnabled: notificationMode === "voice",
   };
 }

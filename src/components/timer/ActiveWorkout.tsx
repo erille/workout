@@ -332,9 +332,13 @@ function WorkoutRunner({
     state.phase !== "idle" &&
     state.phase !== "stopped" &&
     state.phase !== "completed";
+  const voiceProviderLabel =
+    settings.voiceProvider === "piper"
+      ? t("settings.providerPiper")
+      : t("settings.providerBrowser");
   const audioMode =
     settings.notificationMode === "voice"
-      ? t("settings.modeVoice")
+      ? `${t("settings.modeVoice")} - ${voiceProviderLabel}`
       : settings.notificationMode === "beep"
         ? t("settings.modeBeeps")
         : t("settings.modeOff");

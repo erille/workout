@@ -118,6 +118,7 @@ export const defaultExercises = defaultExerciseSeeds.map((exercise) => ({
 export const defaultSettings = {
   voiceEnabled: true,
   notificationMode: "voice",
+  voiceProvider: "piper",
   voiceRate: 1,
   voicePitch: 1,
   voiceVolume: 1,

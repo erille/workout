@@ -11,7 +11,7 @@ import {
   getStepAnnouncement,
 } from "../services/workoutEngine";
 import { cancelAudioCues, playAudioCue, type AudioCueType } from "../services/audioCueService";
-import { cancelSpeech, speak } from "../services/speechService";
+import { cancelSpeech, prepareSpeech, speak } from "../services/speechService";
 
 export type TimerPhase =
   | "idle"
@@ -79,6 +79,16 @@ function resolveStepWeight(
   return weight === null ? undefined : weight;
 }
 
+function getWorkoutSpeechTexts(plan: WorkoutPlan, language: AppSettings["language"]): string[] {
+  return [
+    ...plan.steps.flatMap((step) => [
+      getStepAnnouncement(step, language),
+      ...(step.breakSeconds > 0 ? [getBreakAnnouncement(step.breakSeconds, language)] : []),
+    ]),
+    getCompleteAnnouncement(language),
+  ];
+}
+
 export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerOptions) {
   const [state, setState] = useState<WorkoutRuntimeState>(() => createInitialState(plan));
   const [completedSession, setCompletedSession] = useState<WorkoutSession | null>(null);
@@ -119,6 +129,7 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
       }
 
       speak(text, {
+        voiceProvider: settings.voiceProvider,
         voiceURI: settings.voiceURI,
         language: settings.language,
         rate: settings.voiceRate,
@@ -128,6 +139,22 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
     },
     [settings],
   );
+
+  const speechTexts = useMemo(
+    () => getWorkoutSpeechTexts(plan, settings.language),
+    [plan, settings.language],
+  );
+
+  useEffect(() => {
+    if (settings.notificationMode !== "voice" || settings.voiceProvider !== "piper") {
+      return;
+    }
+
+    prepareSpeech(speechTexts, {
+      language: settings.language,
+      voiceProvider: settings.voiceProvider,
+    });
+  }, [settings.language, settings.notificationMode, settings.voiceProvider, speechTexts]);
 
   const recordStepCompletion = useCallback(
     (round: number, stepIndex: number) => {

@@ -20,7 +20,7 @@ Workout is a local-first web app for building, running, and tracking workout ses
 - Rounds, breaks, active timer, pause, resume, stop, and completion flow.
 - Completed workout history with workout/exercise filtering.
 - English and French interface.
-- Browser voice announcements with rate, pitch, volume, voice picker, and preview.
+- Audio modes for local Piper TTS, browser voice, beeps, and silent workouts.
 - Guest mode using browser localStorage.
 - Private mode using SQLite through the Node API.
 - Password login with Argon2 hash support.
@@ -144,6 +144,7 @@ The production container:
 - Builds the React app into `dist`.
 - Serves static files and `/api` from Node.
 - Stores SQLite data in `/data/workout.sqlite`.
+- Generates and caches Piper TTS audio in `/data/tts-cache`.
 - Exposes port `8060`.
 
 Start or rebuild:
@@ -162,6 +163,12 @@ So the host database lives at:
 
 ```text
 /srv/webdata/workout/workout.sqlite
+```
+
+Cached generated voice files live at:
+
+```text
+/srv/webdata/workout/tts-cache
 ```
 
 Create the host directory if needed:
@@ -196,6 +203,9 @@ The seed command creates 3 demo plans and 11 completed sessions. It replaces onl
 | `POST /api/auth/logout` | Public | Clear session cookie |
 | `GET /api/data` | Private when login is enabled | Load all app data |
 | `POST /api/import` | Private when login is enabled | Replace all app data |
+| `GET /api/tts/status` | Private when login is enabled | Check local Piper TTS availability |
+| `POST /api/tts` | Private when login is enabled | Generate or reuse cached Piper speech |
+| `GET /api/tts/audio/:file` | Private when login is enabled | Play cached generated speech |
 | `PUT /api/exercises` | Private when login is enabled | Save exercises |
 | `PUT /api/plans` | Private when login is enabled | Save workout plans |
 | `PUT /api/sessions` | Private when login is enabled | Save history |

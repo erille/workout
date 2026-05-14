@@ -2,12 +2,14 @@ import { Save, Volume1, Volume2, VolumeX } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import { useI18n } from "../../i18n/I18nContext";
 import type { Language } from "../../i18n/translations";
-import type { AppSettings, NotificationMode } from "../../models/settings";
+import type { AppSettings, NotificationMode, VoiceProvider } from "../../models/settings";
 import { isAudioCueSupported, playAudioCue } from "../../services/audioCueService";
 import {
+  getServerTtsStatus,
   getSpeechVoices,
   isSpeechSupported,
   speak,
+  type ServerTtsStatus,
   type SpeechVoiceOption,
 } from "../../services/speechService";
 
@@ -46,12 +48,16 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
   const { t } = useI18n();
   const [draft, setDraft] = useState<AppSettings>(settings);
   const [message, setMessage] = useState<string | null>(null);
+  const [ttsStatus, setTtsStatus] = useState<ServerTtsStatus | null | undefined>(undefined);
   const [voices, setVoices] = useState<SpeechVoiceOption[]>([]);
   const speechSupported = isSpeechSupported();
   const audioCueSupported = isAudioCueSupported();
   const hasFrenchVoice = voices.some((voice) => voice.lang.toLowerCase().startsWith("fr"));
   const isVoiceMode = draft.notificationMode === "voice";
   const isBeepMode = draft.notificationMode === "beep";
+  const isBrowserVoiceProvider = draft.voiceProvider === "browser";
+  const isPiperVoiceProvider = draft.voiceProvider === "piper";
+  const piperVoice = ttsStatus?.voices.find((voice) => voice.language === draft.language);
 
   useEffect(() => {
     setDraft(settings);
@@ -74,6 +80,26 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
       window.speechSynthesis.removeEventListener("voiceschanged", refreshVoices);
     };
   }, [speechSupported]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    getServerTtsStatus()
+      .then((status) => {
+        if (isMounted) {
+          setTtsStatus(status);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setTtsStatus(null);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -98,10 +124,25 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
     label: string;
     disabled: boolean;
   }> = [
-    { mode: "voice", label: t("settings.modeVoice"), disabled: !speechSupported },
+    { mode: "voice", label: t("settings.modeVoice"), disabled: false },
     { mode: "beep", label: t("settings.modeBeeps"), disabled: !audioCueSupported },
     { mode: "off", label: t("settings.modeOff"), disabled: false },
   ];
+  const voiceProviderOptions: Array<{
+    value: VoiceProvider;
+    label: string;
+  }> = [
+    { value: "piper", label: t("settings.providerPiper") },
+    { value: "browser", label: t("settings.providerBrowser") },
+  ];
+  const piperStatusText =
+    ttsStatus === undefined
+      ? t("settings.piperChecking")
+      : ttsStatus === null
+        ? t("settings.piperUnavailable")
+        : piperVoice?.available
+          ? t("settings.piperAvailable")
+          : t("settings.piperUnavailable");
   const audioStatusText =
     draft.notificationMode === "off"
       ? t("settings.audioOff")
@@ -109,9 +150,11 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
         ? audioCueSupported
           ? t("settings.beepsAvailable")
           : t("settings.beepsUnavailable")
-        : speechSupported
-          ? t("settings.speechAvailable")
-          : t("settings.speechUnavailable");
+        : isPiperVoiceProvider
+          ? piperStatusText
+          : speechSupported
+            ? t("settings.speechAvailable")
+            : t("settings.speechUnavailable");
 
   return (
     <section className="mx-auto max-w-3xl space-y-5">
@@ -176,6 +219,30 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
 
         {isVoiceMode ? (
           <label className="block space-y-2">
+            <span className="label">{t("settings.voiceProvider")}</span>
+            <select
+              className="field"
+              value={draft.voiceProvider}
+              onChange={(event) =>
+                updateDraft({
+                  voiceProvider: event.target.value as VoiceProvider,
+                })
+              }
+            >
+              {voiceProviderOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-sm text-slate-400">
+              {isPiperVoiceProvider ? piperStatusText : t("settings.browserVoiceHelp")}
+            </p>
+          </label>
+        ) : null}
+
+        {isVoiceMode && isBrowserVoiceProvider ? (
+          <label className="block space-y-2">
             <span className="label">{t("settings.voice")}</span>
             <select
               className="field"
@@ -212,7 +279,7 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
           </label>
         ) : null}
 
-        {isVoiceMode ? (
+        {isVoiceMode && isBrowserVoiceProvider ? (
           <div className="grid gap-5 sm:grid-cols-3">
             <label className="space-y-3">
               <span className="label">
@@ -259,7 +326,7 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
           </div>
         ) : null}
 
-        {isBeepMode ? (
+        {isBeepMode || (isVoiceMode && isPiperVoiceProvider) ? (
           <label className="block space-y-3">
             <span className="label">
               {t("settings.volume", { value: numberValue(draft.voiceVolume) })}
@@ -305,9 +372,10 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
             <button
               type="button"
               className="secondary-button"
-              disabled={!speechSupported}
+              disabled={isBrowserVoiceProvider && !speechSupported}
               onClick={() =>
                 speak(t("settings.previewText"), {
+                  voiceProvider: draft.voiceProvider,
                   voiceURI: draft.voiceURI,
                   language: draft.language,
                   rate: draft.voiceRate,

@@ -1,5 +1,6 @@
 import {
   Dumbbell,
+  Download,
   Globe2,
   History,
   Info,
@@ -10,13 +11,14 @@ import {
   BarChart3,
   Settings,
   Timer,
+  Upload,
   UserRound,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import type { Language } from "../../i18n/translations";
 import type { TranslationKey } from "../../i18n/translations";
 import { useI18n } from "../../i18n/I18nContext";
-import type { StorageMode } from "../../data/storage";
+import { exportLocalData, importLocalData, type StorageMode } from "../../data/storage";
 
 export type PageId =
   | "exercises"
@@ -63,6 +65,7 @@ export function Navigation({
   const { t } = useI18n();
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const aboutRef = useRef<HTMLDivElement>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
   const modeLabel =
     storageMode === "local"
       ? t("auth.localMode")
@@ -95,6 +98,43 @@ export function Navigation({
     };
   }, [isAboutOpen]);
 
+  const handleExportLocalData = async () => {
+    const exportData = await exportLocalData();
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    const dateStamp = new Date().toISOString().slice(0, 10);
+
+    anchor.href = url;
+    anchor.download = `workout-backup-${dateStamp}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportLocalData = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    if (!window.confirm(t("localData.importConfirm"))) {
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      await importLocalData(JSON.parse(text));
+      window.alert(t("localData.importSuccess"));
+      window.location.reload();
+    } catch {
+      window.alert(t("localData.importError"));
+    }
+  };
+
   return (
     <header className="sticky top-0 z-20 border-b border-slate-800/90 bg-slate-950/88 backdrop-blur">
       <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-4 sm:px-6 lg:px-8">
@@ -112,6 +152,37 @@ export function Navigation({
             <span className="rounded-md border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm font-semibold text-slate-300">
               {modeLabel}
             </span>
+            {storageMode === "local" ? (
+              <>
+                <button
+                  type="button"
+                  className="secondary-button px-3"
+                  onClick={() => {
+                    void handleExportLocalData();
+                  }}
+                >
+                  <Download aria-hidden="true" size={17} />
+                  {t("localData.export")}
+                </button>
+                <button
+                  type="button"
+                  className="secondary-button px-3"
+                  onClick={() => importInputRef.current?.click()}
+                >
+                  <Upload aria-hidden="true" size={17} />
+                  {t("localData.import")}
+                </button>
+                <input
+                  ref={importInputRef}
+                  className="hidden"
+                  accept="application/json,.json"
+                  type="file"
+                  onChange={(event) => {
+                    void handleImportLocalData(event);
+                  }}
+                />
+              </>
+            ) : null}
             <div ref={aboutRef} className="relative">
               <button
                 type="button"

@@ -21,6 +21,20 @@ type ServerData = {
   profile: CharacterProfile;
 };
 
+export type LocalDataExport = {
+  app: "Workout";
+  version: 1;
+  exportedAt: string;
+  data: {
+    exercises: Exercise[];
+    plans: WorkoutPlan[];
+    sessions: WorkoutSession[];
+    settings: AppSettings;
+    profile: CharacterProfile;
+    quickTimer: QuickTimerSettings;
+  };
+};
+
 export type QuickTimerSettings = {
   name: string;
   workSeconds: number;
@@ -69,6 +83,10 @@ function writeLocalJson<T>(key: string, value: T): void {
   }
 
   window.localStorage.setItem(key, JSON.stringify(value));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 async function apiJson<T>(path: string, options?: RequestInit): Promise<T> {
@@ -299,4 +317,62 @@ export async function getQuickTimerSettings(): Promise<QuickTimerSettings> {
 
 export async function saveQuickTimerSettings(settings: QuickTimerSettings): Promise<void> {
   writeLocalJson(guestStorageKeys.quickTimer, normalizeQuickTimerSettings(settings));
+}
+
+export async function exportLocalData(): Promise<LocalDataExport> {
+  return {
+    app: "Workout",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    data: {
+      exercises: getLocalExercises(),
+      plans: readLocalJson<WorkoutPlan[]>(guestStorageKeys.plans, []),
+      sessions: readLocalJson<WorkoutSession[]>(guestStorageKeys.sessions, []),
+      settings: normalizeSettings(readLocalJson<Partial<AppSettings>>(guestStorageKeys.settings, {})),
+      profile: normalizeProfile(readLocalJson<Partial<CharacterProfile>>(guestStorageKeys.profile, {})),
+      quickTimer: normalizeQuickTimerSettings(
+        readLocalJson<Partial<QuickTimerSettings>>(
+          guestStorageKeys.quickTimer,
+          defaultQuickTimerSettings,
+        ),
+      ),
+    },
+  };
+}
+
+export async function importLocalData(value: unknown): Promise<void> {
+  if (!canUseLocalStorage()) {
+    throw new Error("Local storage is unavailable.");
+  }
+
+  const payload = isRecord(value) && isRecord(value.data) ? value.data : value;
+
+  if (!isRecord(payload)) {
+    throw new Error("Invalid Workout backup file.");
+  }
+
+  writeLocalJson(
+    guestStorageKeys.exercises,
+    Array.isArray(payload.exercises) ? (payload.exercises as Exercise[]) : defaultExercises,
+  );
+  writeLocalJson(
+    guestStorageKeys.plans,
+    Array.isArray(payload.plans) ? (payload.plans as WorkoutPlan[]) : [],
+  );
+  writeLocalJson(
+    guestStorageKeys.sessions,
+    Array.isArray(payload.sessions) ? (payload.sessions as WorkoutSession[]) : [],
+  );
+  writeLocalJson(
+    guestStorageKeys.settings,
+    normalizeSettings(isRecord(payload.settings) ? payload.settings : {}),
+  );
+  writeLocalJson(
+    guestStorageKeys.profile,
+    normalizeProfile(isRecord(payload.profile) ? payload.profile : {}),
+  );
+  writeLocalJson(
+    guestStorageKeys.quickTimer,
+    normalizeQuickTimerSettings(isRecord(payload.quickTimer) ? payload.quickTimer : {}),
+  );
 }

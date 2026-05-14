@@ -25,6 +25,6 @@ export const defaultSettings: AppSettings = {
   voiceRate: 1,
   voicePitch: 1,
   voiceVolume: 1,
-  language: "en",
+  language: "fr",
   theme: "dark",
 };

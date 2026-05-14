@@ -158,29 +158,29 @@ export function ExerciseLibrary({
   };
 
   return (
-    <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_23rem]">
-      <div className="space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="label">{t("exercises.section")}</p>
-            <h2 className="text-2xl font-bold text-slate-50">{t("exercises.title")}</h2>
-          </div>
-          <label className="relative block sm:w-80">
-            <Search
-              aria-hidden="true"
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"
-              size={18}
-            />
-            <input
-              className="field pl-10"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={t("exercises.search")}
-              type="search"
-            />
-          </label>
+    <section className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="label">{t("exercises.section")}</p>
+          <h2 className="text-2xl font-bold text-slate-50">{t("exercises.title")}</h2>
         </div>
+        <label className="relative block sm:w-80">
+          <Search
+            aria-hidden="true"
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"
+            size={18}
+          />
+          <input
+            className="field pl-10"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={t("exercises.search")}
+            type="search"
+          />
+        </label>
+      </div>
 
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_23rem]">
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {filteredExercises.map((exercise) => (
             <article key={exercise.id} className="panel flex flex-col gap-4 p-4">
@@ -241,150 +241,150 @@ export function ExerciseLibrary({
             </article>
           ))}
         </div>
-      </div>
 
-      <aside className="panel h-fit p-4">
-        <form className="space-y-4" onSubmit={handleSubmit}>
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="label">{form.id ? t("exercises.formEdit") : t("exercises.formAdd")}</p>
-              <h2 className="text-xl font-bold text-slate-50">
-                {form.id ? form.name || t("common.exercise") : t("exercises.newExercise")}
-              </h2>
-            </div>
-            {form.id ? (
-              <button type="button" className="secondary-button px-3" onClick={resetForm}>
-                <X aria-hidden="true" size={16} />
-              </button>
-            ) : null}
-          </div>
-
-          <label className="block space-y-2">
-            <span className="label">{t("exercises.name")}</span>
-            <input
-              className="field"
-              value={form.name}
-              onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
-              placeholder={t("exercises.namePlaceholder")}
-            />
-          </label>
-
-          <label className="block space-y-2">
-            <span className="label">{t("exercises.category")}</span>
-            <select
-              className="field"
-              value={form.category}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  category: event.target.value as ExerciseCategory,
-                }))
-              }
-            >
-              {exerciseCategories.map((category) => (
-                <option key={category} value={category}>
-                  {t(`category.${category}`)}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <fieldset className="space-y-2">
-            <legend className="label">{t("exercises.defaultMode")}</legend>
-            <div className="grid grid-cols-2 gap-2">
-              {(["reps", "time", "distance"] as const).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  className={`rounded-md border px-3 py-2 text-sm font-semibold ${
-                    form.defaultMode === mode
-                      ? "border-cyan-300 bg-cyan-300 text-slate-950"
-                      : "border-slate-700 bg-slate-950 text-slate-300"
-                  }`}
-                  onClick={() => setForm((current) => ({ ...current, defaultMode: mode }))}
-                >
-                  {modeLabel(mode, {
-                    time: t("common.time"),
-                    reps: t("common.reps"),
-                    distance: t("common.distance"),
-                  })}
+        <aside className="panel h-fit p-4">
+          <form className="space-y-4" onSubmit={handleSubmit}>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="label">{form.id ? t("exercises.formEdit") : t("exercises.formAdd")}</p>
+                <h2 className="text-xl font-bold text-slate-50">
+                  {form.id ? form.name || t("common.exercise") : t("exercises.newExercise")}
+                </h2>
+              </div>
+              {form.id ? (
+                <button type="button" className="secondary-button px-3" onClick={resetForm}>
+                  <X aria-hidden="true" size={16} />
                 </button>
-              ))}
+              ) : null}
             </div>
-          </fieldset>
 
-          {form.defaultMode === "time" ? (
             <label className="block space-y-2">
-              <span className="label">{t("exercises.defaultDuration")}</span>
+              <span className="label">{t("exercises.name")}</span>
               <input
                 className="field"
-                min={1}
-                type="number"
-                value={form.defaultDurationSeconds}
+                value={form.name}
+                onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                placeholder={t("exercises.namePlaceholder")}
+              />
+            </label>
+
+            <label className="block space-y-2">
+              <span className="label">{t("exercises.category")}</span>
+              <select
+                className="field"
+                value={form.category}
                 onChange={(event) =>
                   setForm((current) => ({
                     ...current,
-                    defaultDurationSeconds: Number(event.target.value),
+                    category: event.target.value as ExerciseCategory,
                   }))
                 }
-              />
+              >
+                {exerciseCategories.map((category) => (
+                  <option key={category} value={category}>
+                    {t(`category.${category}`)}
+                  </option>
+                ))}
+              </select>
             </label>
-          ) : form.defaultMode === "distance" ? (
+
+            <fieldset className="space-y-2">
+              <legend className="label">{t("exercises.defaultMode")}</legend>
+              <div className="grid grid-cols-2 gap-2">
+                {(["reps", "time", "distance"] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    className={`rounded-md border px-3 py-2 text-sm font-semibold ${
+                      form.defaultMode === mode
+                        ? "border-cyan-300 bg-cyan-300 text-slate-950"
+                        : "border-slate-700 bg-slate-950 text-slate-300"
+                    }`}
+                    onClick={() => setForm((current) => ({ ...current, defaultMode: mode }))}
+                  >
+                    {modeLabel(mode, {
+                      time: t("common.time"),
+                      reps: t("common.reps"),
+                      distance: t("common.distance"),
+                    })}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+
+            {form.defaultMode === "time" ? (
+              <label className="block space-y-2">
+                <span className="label">{t("exercises.defaultDuration")}</span>
+                <input
+                  className="field"
+                  min={1}
+                  type="number"
+                  value={form.defaultDurationSeconds}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      defaultDurationSeconds: Number(event.target.value),
+                    }))
+                  }
+                />
+              </label>
+            ) : form.defaultMode === "distance" ? (
+              <label className="block space-y-2">
+                <span className="label">{t("exercises.defaultDistance")}</span>
+                <input
+                  className="field"
+                  min={1}
+                  type="number"
+                  value={form.defaultDistanceMeters}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      defaultDistanceMeters: Number(event.target.value),
+                    }))
+                  }
+                />
+              </label>
+            ) : (
+              <label className="block space-y-2">
+                <span className="label">{t("exercises.defaultReps")}</span>
+                <input
+                  className="field"
+                  min={1}
+                  type="number"
+                  value={form.defaultReps}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      defaultReps: Number(event.target.value),
+                    }))
+                  }
+                />
+              </label>
+            )}
+
             <label className="block space-y-2">
-              <span className="label">{t("exercises.defaultDistance")}</span>
-              <input
-                className="field"
-                min={1}
-                type="number"
-                value={form.defaultDistanceMeters}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    defaultDistanceMeters: Number(event.target.value),
-                  }))
-                }
+              <span className="label">{t("exercises.notes")}</span>
+              <textarea
+                className="field min-h-24 resize-y"
+                value={form.notes}
+                onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))}
+                placeholder={t("exercises.notesPlaceholder")}
               />
             </label>
-          ) : (
-            <label className="block space-y-2">
-              <span className="label">{t("exercises.defaultReps")}</span>
-              <input
-                className="field"
-                min={1}
-                type="number"
-                value={form.defaultReps}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    defaultReps: Number(event.target.value),
-                  }))
-                }
-              />
-            </label>
-          )}
 
-          <label className="block space-y-2">
-            <span className="label">{t("exercises.notes")}</span>
-            <textarea
-              className="field min-h-24 resize-y"
-              value={form.notes}
-              onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))}
-              placeholder={t("exercises.notesPlaceholder")}
-            />
-          </label>
+            {error ? (
+              <div className="rounded-md border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
+                {error}
+              </div>
+            ) : null}
 
-          {error ? (
-            <div className="rounded-md border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
-              {error}
-            </div>
-          ) : null}
-
-          <button type="submit" className="primary-button w-full" disabled={isSaving}>
-            {form.id ? <Save aria-hidden="true" size={17} /> : <Plus aria-hidden="true" size={17} />}
-            {form.id ? t("exercises.saveChanges") : t("exercises.addExercise")}
-          </button>
-        </form>
-      </aside>
+            <button type="submit" className="primary-button w-full" disabled={isSaving}>
+              {form.id ? <Save aria-hidden="true" size={17} /> : <Plus aria-hidden="true" size={17} />}
+              {form.id ? t("exercises.saveChanges") : t("exercises.addExercise")}
+            </button>
+          </form>
+        </aside>
+      </div>
     </section>
   );
 }

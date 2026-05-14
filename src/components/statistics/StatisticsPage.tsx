@@ -52,8 +52,10 @@ type LiftExerciseSummary = {
 };
 
 type LiftVolumeBucket = {
+  bestEstimatedOneRepMaxKg: number;
   key: string;
   label: string;
+  sets: number;
   volumeKg: number;
 };
 
@@ -262,6 +264,16 @@ function getLiftVolumeInRange(entries: LiftEntry[], start: Date, end: Date): num
     .reduce((total, entry) => total + entry.volumeKg, 0);
 }
 
+function getLiftEntriesInRange(entries: LiftEntry[], start: Date, end: Date): LiftEntry[] {
+  const startTime = start.getTime();
+  const endTime = end.getTime();
+
+  return entries.filter((entry) => {
+    const time = entry.date.getTime();
+    return time >= startTime && time < endTime;
+  });
+}
+
 function buildLiftYearBuckets(
   entries: LiftEntry[],
   locale: string,
@@ -271,11 +283,17 @@ function buildLiftYearBuckets(
 
   return Array.from({ length: 12 }, (_, index) => {
     const month = addMonths(start, index);
+    const monthEntries = getLiftEntriesInRange(entries, month, addMonths(month, 1));
 
     return {
+      bestEstimatedOneRepMaxKg: Math.max(
+        0,
+        ...monthEntries.map((entry) => entry.estimatedOneRepMaxKg),
+      ),
       key: `${month.getFullYear()}-${month.getMonth()}`,
       label: formatShortMonth(locale, month),
-      volumeKg: getLiftVolumeInRange(entries, month, addMonths(month, 1)),
+      sets: monthEntries.length,
+      volumeKg: monthEntries.reduce((total, entry) => total + entry.volumeKg, 0),
     };
   });
 }
@@ -313,6 +331,10 @@ function maxCount(values: Array<{ count: number }>): number {
 
 function maxVolume(values: Array<{ volumeKg: number }>): number {
   return Math.max(1, ...values.map((value) => value.volumeKg));
+}
+
+function maxEstimatedOneRepMax(values: Array<{ bestEstimatedOneRepMaxKg: number }>): number {
+  return Math.max(1, ...values.map((value) => value.bestEstimatedOneRepMaxKg));
 }
 
 function formatKg(locale: string, value: number, maximumFractionDigits = 0): string {
@@ -422,9 +444,148 @@ function VolumeBarList({
   );
 }
 
+function ExerciseTrendPanel({
+  buckets,
+  entries,
+  exerciseName,
+  locale,
+}: {
+  buckets: LiftVolumeBucket[];
+  entries: LiftEntry[];
+  exerciseName: string;
+  locale: string;
+}) {
+  const { t } = useI18n();
+  const topVolume = maxVolume(buckets);
+  const topEstimatedOneRepMax = maxEstimatedOneRepMax(buckets);
+  const sortedEntries = [...entries].sort((a, b) => b.date.getTime() - a.date.getTime()).slice(0, 8);
+  const bestEntry = entries.reduce<LiftEntry | undefined>(
+    (best, entry) =>
+      !best || entry.estimatedOneRepMaxKg > best.estimatedOneRepMaxKg ? entry : best,
+    undefined,
+  );
+  const totalVolume = entries.reduce((total, entry) => total + entry.volumeKg, 0);
+
+  return (
+    <div className="rounded-md border border-cyan-300/40 bg-cyan-300/10 p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="label">{t("statistics.exerciseDetails")}</p>
+          <h4 className="text-xl font-bold text-slate-50">{exerciseName}</h4>
+        </div>
+        <div className="grid grid-cols-3 gap-2 text-center text-sm">
+          <div className="rounded-md bg-slate-950/70 px-3 py-2">
+            <p className="label">{t("statistics.sets")}</p>
+            <p className="font-black text-slate-50">{entries.length}</p>
+          </div>
+          <div className="rounded-md bg-slate-950/70 px-3 py-2">
+            <p className="label">{t("statistics.volume")}</p>
+            <p className="font-black text-slate-50">{formatKg(locale, totalVolume)}</p>
+          </div>
+          <div className="rounded-md bg-slate-950/70 px-3 py-2">
+            <p className="label">{t("statistics.bestEstimatedShort")}</p>
+            <p className="font-black text-slate-50">
+              {bestEntry ? formatKg(locale, bestEntry.estimatedOneRepMaxKg, 1) : "-"}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-4 xl:grid-cols-2">
+        <div>
+          <p className="mb-3 text-sm font-bold text-slate-100">{t("statistics.exerciseVolumeTrend")}</p>
+          <div className="space-y-3">
+            {buckets.map((bucket) => (
+              <div key={bucket.key} className="grid grid-cols-[4rem_minmax(0,1fr)_5.5rem] items-center gap-3">
+                <p className="truncate text-sm font-semibold text-slate-300">{bucket.label}</p>
+                <div className="h-7 overflow-hidden rounded-md bg-slate-950/80">
+                  <div
+                    className="flex h-full items-center justify-end rounded-md bg-cyan-300 px-2 text-xs font-black text-slate-950"
+                    style={{
+                      width: `${Math.max(bucket.volumeKg === 0 ? 0 : 12, (bucket.volumeKg / topVolume) * 100)}%`,
+                    }}
+                  >
+                    {bucket.volumeKg > 0 ? formatKg(locale, bucket.volumeKg) : ""}
+                  </div>
+                </div>
+                <p className="text-right text-sm font-bold text-slate-300">
+                  {formatKg(locale, bucket.volumeKg)}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="mb-3 text-sm font-bold text-slate-100">{t("statistics.exerciseStrengthTrend")}</p>
+          <div className="space-y-3">
+            {buckets.map((bucket) => (
+              <div key={bucket.key} className="grid grid-cols-[4rem_minmax(0,1fr)_5.5rem] items-center gap-3">
+                <p className="truncate text-sm font-semibold text-slate-300">{bucket.label}</p>
+                <div className="h-7 overflow-hidden rounded-md bg-slate-950/80">
+                  <div
+                    className="flex h-full items-center justify-end rounded-md bg-amber-300 px-2 text-xs font-black text-amber-950"
+                    style={{
+                      width: `${Math.max(
+                        bucket.bestEstimatedOneRepMaxKg === 0 ? 0 : 12,
+                        (bucket.bestEstimatedOneRepMaxKg / topEstimatedOneRepMax) * 100,
+                      )}%`,
+                    }}
+                  >
+                    {bucket.bestEstimatedOneRepMaxKg > 0
+                      ? formatKg(locale, bucket.bestEstimatedOneRepMaxKg, 1)
+                      : ""}
+                  </div>
+                </div>
+                <p className="text-right text-sm font-bold text-slate-300">
+                  {bucket.bestEstimatedOneRepMaxKg > 0
+                    ? formatKg(locale, bucket.bestEstimatedOneRepMaxKg, 1)
+                    : "-"}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-5">
+        <p className="mb-3 text-sm font-bold text-slate-100">{t("statistics.recentSets")}</p>
+        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+          {sortedEntries.map((entry, index) => (
+            <div
+              key={`${entry.date.toISOString()}-${entry.weightKg}-${entry.reps}-${index}`}
+              className="rounded-md border border-slate-800 bg-slate-950/70 p-3"
+            >
+              <p className="text-xs font-semibold uppercase text-cyan-200">
+                {new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(entry.date)}
+              </p>
+              <p className="mt-1 font-bold text-slate-50">
+                {formatKg(locale, entry.weightKg, 1)} x {entry.reps}
+              </p>
+              <p className="text-sm text-slate-400">
+                {t("statistics.volume")}: {formatKg(locale, entry.volumeKg)}
+              </p>
+              <p className="text-sm text-slate-400">
+                {t("statistics.bestEstimatedShort")}:{" "}
+                {formatKg(locale, entry.estimatedOneRepMaxKg, 1)}
+              </p>
+            </div>
+          ))}
+        </div>
+        <p className="mt-3 text-xs text-slate-500">
+          {t("statistics.exerciseDetailNote", {
+            exercise: exerciseName,
+          })}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export function StatisticsPage({ profile, sessions }: StatisticsPageProps) {
   const { language, t } = useI18n();
   const [viewMode, setViewMode] = useState<ViewMode>("weeks");
+  const [selectedLiftExerciseKey, setSelectedLiftExerciseKey] = useState<string | null>(null);
   const [selectedMonth, setSelectedMonth] = useState(() => monthStart(new Date()));
   const [selectedYear, setSelectedYear] = useState(() => yearStart(new Date()));
   const locale = language === "fr" ? "fr-FR" : "en-US";
@@ -449,6 +610,23 @@ export function StatisticsPage({ profile, sessions }: StatisticsPageProps) {
     [liftEntries, locale, selectedYear],
   );
   const topLiftExercises = useMemo(() => getTopLiftExercises(liftEntries), [liftEntries]);
+  const selectedLiftExercise =
+    topLiftExercises.find(
+      (exercise) => (exercise.exerciseId ?? exercise.exerciseName.toLowerCase()) === selectedLiftExerciseKey,
+    ) ?? topLiftExercises[0];
+  const selectedLiftExerciseKeyValue = selectedLiftExercise
+    ? selectedLiftExercise.exerciseId ?? selectedLiftExercise.exerciseName.toLowerCase()
+    : null;
+  const selectedLiftEntries = selectedLiftExerciseKeyValue
+    ? liftEntries.filter(
+        (entry) =>
+          (entry.exerciseId ?? entry.exerciseName.toLowerCase()) === selectedLiftExerciseKeyValue,
+      )
+    : [];
+  const selectedLiftBuckets = useMemo(
+    () => buildLiftYearBuckets(selectedLiftEntries, locale, selectedYear),
+    [locale, selectedLiftEntries, selectedYear],
+  );
 
   const totalWorkouts = sessionDates.length;
   const fullWorkouts = sessions.filter((session) => session.completed).length;
@@ -716,7 +894,18 @@ export function StatisticsPage({ profile, sessions }: StatisticsPageProps) {
                 <p className="label">{t("statistics.topLiftExercises")}</p>
                 <div className="mt-3 space-y-3">
                   {topLiftExercises.map((exercise) => (
-                    <div key={exercise.exerciseId ?? exercise.exerciseName} className="rounded-md bg-slate-900/80 p-3">
+                    <button
+                      key={exercise.exerciseId ?? exercise.exerciseName}
+                      type="button"
+                      className={`w-full rounded-md border p-3 text-left transition ${
+                        selectedLiftExerciseKeyValue === (exercise.exerciseId ?? exercise.exerciseName.toLowerCase())
+                          ? "border-cyan-300 bg-cyan-300/15"
+                          : "border-transparent bg-slate-900/80 hover:border-slate-600"
+                      }`}
+                      onClick={() =>
+                        setSelectedLiftExerciseKey(exercise.exerciseId ?? exercise.exerciseName.toLowerCase())
+                      }
+                    >
                       <div className="flex items-start justify-between gap-3">
                         <p className="font-bold text-slate-50">
                           {translateExerciseName(exercise, language)}
@@ -733,7 +922,7 @@ export function StatisticsPage({ profile, sessions }: StatisticsPageProps) {
                         - {t("statistics.bestEstimatedShort")}{" "}
                         {formatKg(locale, exercise.bestEstimatedOneRepMaxKg, 1)}
                       </p>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -752,6 +941,17 @@ export function StatisticsPage({ profile, sessions }: StatisticsPageProps) {
             </aside>
           </div>
         )}
+
+        {selectedLiftExercise && selectedLiftEntries.length > 0 ? (
+          <div className="mt-5">
+            <ExerciseTrendPanel
+              buckets={selectedLiftBuckets}
+              entries={selectedLiftEntries}
+              exerciseName={translateExerciseName(selectedLiftExercise, language)}
+              locale={locale}
+            />
+          </div>
+        ) : null}
       </div>
     </section>
   );

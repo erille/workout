@@ -660,13 +660,19 @@ export function StatisticsPage({ profile, sessions }: StatisticsPageProps) {
 
   return (
     <section className="space-y-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="label">{t("statistics.section")}</p>
-          <h2 className="text-2xl font-bold text-slate-50">{t("statistics.title")}</h2>
-          <p className="mt-1 max-w-2xl text-sm text-slate-400">{t("statistics.description")}</p>
-        </div>
-        <div className="flex w-fit rounded-md border border-slate-800 bg-slate-950/70 p-1">
+      <div>
+        <p className="label">{t("statistics.section")}</p>
+        <h2 className="text-2xl font-bold text-slate-50">{t("statistics.title")}</h2>
+        <p className="mt-1 max-w-2xl text-sm text-slate-400">{t("statistics.description")}</p>
+      </div>
+
+      <div className="panel space-y-5 p-4 sm:p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="label">{t("statistics.workoutOverview")}</p>
+            <h3 className="text-xl font-bold text-slate-50">{t("statistics.workoutOverviewTitle")}</h3>
+          </div>
+          <div className="flex w-fit rounded-md border border-slate-800 bg-slate-950/70 p-1">
           {viewModes.map((mode) => (
             <button
               key={mode.id}
@@ -679,19 +685,19 @@ export function StatisticsPage({ profile, sessions }: StatisticsPageProps) {
               {t(mode.labelKey)}
             </button>
           ))}
+          </div>
         </div>
-      </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <StatCard icon={BarChart3} label={t("statistics.totalWorkouts")} value={String(totalWorkouts)} />
-        <StatCard icon={CalendarDays} label={t("statistics.thisWeek")} value={String(thisWeekCount)} />
-        <StatCard icon={CalendarDays} label={t("statistics.thisMonth")} value={String(thisMonthCount)} />
-        <StatCard icon={CalendarDays} label={t("statistics.thisYear")} value={String(thisYearCount)} />
-        <StatCard icon={CircleGauge} label={t("statistics.partialWorkouts")} value={String(partialWorkouts)} />
-      </div>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <StatCard icon={BarChart3} label={t("statistics.totalWorkouts")} value={String(totalWorkouts)} />
+          <StatCard icon={CalendarDays} label={t("statistics.thisWeek")} value={String(thisWeekCount)} />
+          <StatCard icon={CalendarDays} label={t("statistics.thisMonth")} value={String(thisMonthCount)} />
+          <StatCard icon={CalendarDays} label={t("statistics.thisYear")} value={String(thisYearCount)} />
+          <StatCard icon={CircleGauge} label={t("statistics.partialWorkouts")} value={String(partialWorkouts)} />
+        </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        <div className="panel p-4">
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
+          <div className="rounded-md border border-slate-800 bg-slate-950/55 p-4">
           {totalWorkouts === 0 ? (
             <div className="rounded-md border border-slate-800 bg-slate-950/60 p-6 text-slate-300">
               {t("statistics.empty")}
@@ -791,10 +797,10 @@ export function StatisticsPage({ profile, sessions }: StatisticsPageProps) {
               <BarList buckets={yearBuckets} />
             </div>
           ) : null}
-        </div>
+          </div>
 
-        <aside className="space-y-4">
-          <div className="panel p-4">
+          <aside className="space-y-4">
+            <div className="rounded-md border border-slate-800 bg-slate-950/55 p-4">
             <p className="label">{t("statistics.breakdown")}</p>
             <div className="mt-4 space-y-3">
               <div className="flex items-center justify-between gap-3">
@@ -810,9 +816,9 @@ export function StatisticsPage({ profile, sessions }: StatisticsPageProps) {
                 </span>
               </div>
             </div>
-          </div>
+            </div>
 
-          <div className="panel p-4">
+            <div className="rounded-md border border-slate-800 bg-slate-950/55 p-4">
             <div className="flex items-center gap-3">
               <span className="flex h-10 w-10 items-center justify-center rounded-md bg-amber-300/15 text-amber-200">
                 <Trophy aria-hidden="true" size={20} />
@@ -836,8 +842,9 @@ export function StatisticsPage({ profile, sessions }: StatisticsPageProps) {
                 </p>
               </div>
             </div>
-          </div>
-        </aside>
+            </div>
+          </aside>
+        </div>
       </div>
 
       <div className="panel p-4">

@@ -32,6 +32,7 @@ export type LocalDataExport = {
     settings: AppSettings;
     profile: CharacterProfile;
     quickTimer: QuickTimerSettings;
+    exerciseDefaultsVersion: number;
   };
 };
 
@@ -51,12 +52,17 @@ export const defaultQuickTimerSettings: QuickTimerSettings = {
 
 const guestStorageKeys = {
   exercises: "workout.guest.exercises.v1",
+  exerciseDefaultsVersion: "workout.guest.exerciseDefaultsVersion.v1",
   plans: "workout.guest.plans.v1",
   sessions: "workout.guest.sessions.v1",
   settings: "workout.guest.settings.v1",
   profile: "workout.guest.profile.v1",
   quickTimer: "workout.guest.quickTimer.v1",
 } as const;
+
+const EXERCISE_DEFAULTS_VERSION = 1;
+const DEFAULT_TIME_SECONDS = 45;
+const DEFAULT_REPS = 20;
 
 let serverDataPromise: Promise<ServerData> | null = null;
 
@@ -149,11 +155,44 @@ function getLocalExercises(): Exercise[] {
   const exercises = readLocalJson<Exercise[]>(guestStorageKeys.exercises, []);
 
   if (exercises.length > 0) {
+    const exerciseDefaultsVersion = readLocalJson<number>(
+      guestStorageKeys.exerciseDefaultsVersion,
+      0,
+    );
+
+    if (exerciseDefaultsVersion < EXERCISE_DEFAULTS_VERSION) {
+      const migratedExercises = applyExerciseDefaultTargets(exercises);
+      writeLocalJson(guestStorageKeys.exercises, migratedExercises);
+      writeLocalJson(guestStorageKeys.exerciseDefaultsVersion, EXERCISE_DEFAULTS_VERSION);
+      return migratedExercises;
+    }
+
     return exercises;
   }
 
   writeLocalJson(guestStorageKeys.exercises, defaultExercises);
+  writeLocalJson(guestStorageKeys.exerciseDefaultsVersion, EXERCISE_DEFAULTS_VERSION);
   return defaultExercises;
+}
+
+function applyExerciseDefaultTargets(exercises: Exercise[]): Exercise[] {
+  return exercises.map((exercise) => {
+    if (exercise.defaultMode === "time") {
+      return {
+        ...exercise,
+        defaultDurationSeconds: DEFAULT_TIME_SECONDS,
+      };
+    }
+
+    if (exercise.defaultMode === "reps") {
+      return {
+        ...exercise,
+        defaultReps: DEFAULT_REPS,
+      };
+    }
+
+    return exercise;
+  });
 }
 
 function normalizeProfile(profile?: Partial<CharacterProfile>): CharacterProfile {
@@ -192,6 +231,9 @@ function normalizeSettings(settings?: Partial<AppSettings>): AppSettings {
     settings?.voiceLanguage === "fr"
       ? settings.voiceLanguage
       : defaultSettings.voiceLanguage;
+  const exerciseDefaultsVersion = Number.isFinite(settings?.exerciseDefaultsVersion)
+    ? Math.max(0, Math.round(Number(settings?.exerciseDefaultsVersion)))
+    : defaultSettings.exerciseDefaultsVersion;
 
   return {
     ...defaultSettings,
@@ -200,6 +242,7 @@ function normalizeSettings(settings?: Partial<AppSettings>): AppSettings {
     voiceProvider,
     voiceLanguage,
     voiceEnabled: notificationMode === "voice",
+    exerciseDefaultsVersion,
   };
 }
 
@@ -336,6 +379,10 @@ export async function exportLocalData(): Promise<LocalDataExport> {
           defaultQuickTimerSettings,
         ),
       ),
+      exerciseDefaultsVersion: readLocalJson<number>(
+        guestStorageKeys.exerciseDefaultsVersion,
+        EXERCISE_DEFAULTS_VERSION,
+      ),
     },
   };
 }
@@ -351,9 +398,20 @@ export async function importLocalData(value: unknown): Promise<void> {
     throw new Error("Invalid Workout backup file.");
   }
 
+  const importedExerciseDefaultsVersion =
+    typeof payload.exerciseDefaultsVersion === "number" ? payload.exerciseDefaultsVersion : 0;
+  const importedExercises = Array.isArray(payload.exercises)
+    ? (payload.exercises as Exercise[])
+    : defaultExercises;
   writeLocalJson(
     guestStorageKeys.exercises,
-    Array.isArray(payload.exercises) ? (payload.exercises as Exercise[]) : defaultExercises,
+    importedExerciseDefaultsVersion < EXERCISE_DEFAULTS_VERSION
+      ? applyExerciseDefaultTargets(importedExercises)
+      : importedExercises,
+  );
+  writeLocalJson(
+    guestStorageKeys.exerciseDefaultsVersion,
+    Math.max(importedExerciseDefaultsVersion, EXERCISE_DEFAULTS_VERSION),
   );
   writeLocalJson(
     guestStorageKeys.plans,

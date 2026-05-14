@@ -15,6 +15,7 @@ export type AppSettings = {
   voiceVolume: number;
   language: Language;
   theme: "dark" | "light";
+  exerciseDefaultsVersion: number;
 };
 
 export const defaultSettings: AppSettings = {
@@ -27,4 +28,5 @@ export const defaultSettings: AppSettings = {
   voiceVolume: 1,
   language: "fr",
   theme: "dark",
+  exerciseDefaultsVersion: 1,
 };

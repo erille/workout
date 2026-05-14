@@ -35,7 +35,7 @@ const emptyForm: ExerciseFormState = {
   category: "push",
   defaultMode: "reps",
   defaultDurationSeconds: 45,
-  defaultReps: 12,
+  defaultReps: 20,
   defaultDistanceMeters: 500,
   notes: "",
 };
@@ -47,7 +47,7 @@ function toFormState(exercise: Exercise): ExerciseFormState {
     category: exercise.category,
     defaultMode: exercise.defaultMode,
     defaultDurationSeconds: exercise.defaultDurationSeconds ?? 45,
-    defaultReps: exercise.defaultReps ?? 12,
+    defaultReps: exercise.defaultReps ?? 20,
     defaultDistanceMeters: exercise.defaultDistanceMeters ?? 500,
     notes: exercise.notes ?? "",
     createdAt: exercise.createdAt,

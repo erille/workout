@@ -103,7 +103,7 @@ function createStepFromExercise(
     return {
       ...common,
       type: "time",
-      durationSeconds: exercise.defaultDurationSeconds ?? defaults.durationSeconds,
+      durationSeconds: defaults.durationSeconds,
     };
   }
 
@@ -111,14 +111,14 @@ function createStepFromExercise(
     return {
       ...common,
       type: "distance",
-      distanceMeters: exercise.defaultDistanceMeters ?? defaults.distanceMeters,
+      distanceMeters: defaults.distanceMeters,
     };
   }
 
   return {
     ...common,
     type: "reps",
-    reps: exercise.defaultReps ?? defaults.reps,
+    reps: defaults.reps,
   };
 }
 
@@ -147,6 +147,7 @@ type SortableStepProps = {
   step: WorkoutStep;
   index: number;
   defaults: StepDefaults;
+  onDuplicate: (stepId: string) => void;
   onRemove: (stepId: string) => void;
   onChangeType: (stepId: string, type: WorkoutStep["type"]) => void;
   onUpdate: (stepId: string, update: (step: WorkoutStep) => WorkoutStep) => void;
@@ -157,6 +158,7 @@ function SortableStep({
   index,
   defaults,
   onChangeType,
+  onDuplicate,
   onRemove,
   onUpdate,
 }: SortableStepProps) {
@@ -312,14 +314,24 @@ function SortableStep({
           </label>
         </div>
 
-        <button
-          type="button"
-          className="danger-button h-11 px-3"
-          aria-label={`Remove ${step.exerciseName}`}
-          onClick={() => onRemove(step.id)}
-        >
-          <Trash2 aria-hidden="true" size={17} />
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            className="secondary-button h-11 px-3"
+            aria-label={t("builder.duplicateStep", { number: index + 1 })}
+            onClick={() => onDuplicate(step.id)}
+          >
+            <Copy aria-hidden="true" size={17} />
+          </button>
+          <button
+            type="button"
+            className="danger-button h-11 px-3"
+            aria-label={`Remove ${step.exerciseName}`}
+            onClick={() => onRemove(step.id)}
+          >
+            <Trash2 aria-hidden="true" size={17} />
+          </button>
+        </div>
       </div>
 
       <div className="mt-3 text-xs text-slate-500">
@@ -349,7 +361,7 @@ export function WorkoutBuilder({
   });
   const [defaults, setDefaults] = useState<StepDefaults>({
     durationSeconds: 45,
-    reps: 12,
+    reps: 20,
     distanceMeters: 500,
     breakSeconds: 15,
   });
@@ -453,6 +465,27 @@ export function WorkoutBuilder({
 
   const removeStep = (stepId: string) => {
     updateDraftSteps((steps) => steps.filter((step) => step.id !== stepId));
+  };
+
+  const duplicateStep = (stepId: string) => {
+    updateDraftSteps((steps) => {
+      const stepIndex = steps.findIndex((step) => step.id === stepId);
+
+      if (stepIndex < 0) {
+        return steps;
+      }
+
+      const duplicate = {
+        ...steps[stepIndex],
+        id: createId("step"),
+      };
+
+      return [
+        ...steps.slice(0, stepIndex + 1),
+        duplicate,
+        ...steps.slice(stepIndex + 1),
+      ];
+    });
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -896,6 +929,7 @@ export function WorkoutBuilder({
                       index={index}
                       step={step}
                       onChangeType={changeStepType}
+                      onDuplicate={duplicateStep}
                       onRemove={removeStep}
                       onUpdate={updateStep}
                     />

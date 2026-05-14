@@ -52,6 +52,9 @@ const authSecret = process.env.WORKOUT_AUTH_SECRET?.trim() || passwordHash || "w
 const sessionCookieName = "workout_session";
 const sessionMaxAgeSeconds = 60 * 60 * 24 * 7;
 const allowedTables = new Set(["exercises", "plans", "sessions"]);
+const exerciseDefaultsVersion = 1;
+const defaultTimeSeconds = 45;
+const defaultReps = 20;
 
 mkdirSync(dirname(dbPath), { recursive: true });
 
@@ -285,6 +288,26 @@ function writeCollection(table, items) {
   }
 }
 
+function applyExerciseDefaultTargets(exercises) {
+  return exercises.map((exercise) => {
+    if (exercise.defaultMode === "time") {
+      return {
+        ...exercise,
+        defaultDurationSeconds: defaultTimeSeconds,
+      };
+    }
+
+    if (exercise.defaultMode === "reps") {
+      return {
+        ...exercise,
+        defaultReps,
+      };
+    }
+
+    return exercise;
+  });
+}
+
 function readSettings() {
   const row = db.prepare("SELECT data FROM settings WHERE id = 1").get();
   const savedSettings = row ? JSON.parse(row.data) : {};
@@ -301,6 +324,9 @@ function readSettings() {
     savedSettings.voiceLanguage === "fr"
       ? savedSettings.voiceLanguage
       : defaultSettings.voiceLanguage;
+  const savedExerciseDefaultsVersion = Number.isFinite(savedSettings.exerciseDefaultsVersion)
+    ? Math.max(0, Math.round(Number(savedSettings.exerciseDefaultsVersion)))
+    : 0;
 
   return {
     ...defaultSettings,
@@ -309,6 +335,7 @@ function readSettings() {
     voiceProvider,
     voiceLanguage,
     voiceEnabled: notificationMode === "voice",
+    exerciseDefaultsVersion: savedExerciseDefaultsVersion,
   };
 }
 
@@ -330,6 +357,9 @@ function writeSettings(settings) {
     settings.voiceLanguage === "fr"
       ? settings.voiceLanguage
       : defaultSettings.voiceLanguage;
+  const nextExerciseDefaultsVersion = Number.isFinite(settings.exerciseDefaultsVersion)
+    ? Math.max(0, Math.round(Number(settings.exerciseDefaultsVersion)))
+    : defaultSettings.exerciseDefaultsVersion;
 
   db.prepare(
     `INSERT INTO settings (id, data, updated_at)
@@ -342,6 +372,7 @@ function writeSettings(settings) {
     voiceProvider,
     voiceLanguage,
     voiceEnabled: notificationMode === "voice",
+    exerciseDefaultsVersion: nextExerciseDefaultsVersion,
   }), new Date().toISOString());
 }
 
@@ -400,21 +431,42 @@ function seedDefaults() {
 
 function readAllData() {
   seedDefaults();
+  const settings = readSettings();
+  let exercises = readCollection("exercises");
+
+  if (settings.exerciseDefaultsVersion < exerciseDefaultsVersion) {
+    exercises = applyExerciseDefaultTargets(exercises);
+    writeCollection("exercises", exercises);
+    settings.exerciseDefaultsVersion = exerciseDefaultsVersion;
+    writeSettings(settings);
+  }
 
   return {
-    exercises: readCollection("exercises"),
+    exercises,
     plans: readCollection("plans"),
     sessions: readCollection("sessions"),
-    settings: readSettings(),
+    settings,
     profile: readProfile(),
   };
 }
 
 function writeAllData(data) {
-  writeCollection("exercises", data.exercises ?? []);
+  const settings = data.settings ?? defaultSettings;
+  const importedExerciseDefaultsVersion = Number.isFinite(settings.exerciseDefaultsVersion)
+    ? Math.max(0, Math.round(Number(settings.exerciseDefaultsVersion)))
+    : 0;
+  const exercises =
+    importedExerciseDefaultsVersion < exerciseDefaultsVersion
+      ? applyExerciseDefaultTargets(data.exercises ?? [])
+      : data.exercises ?? [];
+
+  writeCollection("exercises", exercises);
   writeCollection("plans", data.plans ?? []);
   writeCollection("sessions", data.sessions ?? []);
-  writeSettings(data.settings ?? defaultSettings);
+  writeSettings({
+    ...settings,
+    exerciseDefaultsVersion: Math.max(importedExerciseDefaultsVersion, exerciseDefaultsVersion),
+  });
   writeProfile(data.profile ?? defaultProfile);
 }
 

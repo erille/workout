@@ -5,6 +5,7 @@ import {
   defaultSettings,
   type AppSettings,
   type NotificationMode,
+  type VoiceLanguage,
   type VoiceProvider,
 } from "../models/settings";
 import type { WorkoutSession } from "../models/session";
@@ -167,12 +168,19 @@ function normalizeSettings(settings?: Partial<AppSettings>): AppSettings {
     settings?.voiceProvider === "browser" || settings?.voiceProvider === "piper"
       ? settings.voiceProvider
       : defaultSettings.voiceProvider;
+  const voiceLanguage: VoiceLanguage =
+    settings?.voiceLanguage === "app" ||
+    settings?.voiceLanguage === "en" ||
+    settings?.voiceLanguage === "fr"
+      ? settings.voiceLanguage
+      : defaultSettings.voiceLanguage;
 
   return {
     ...defaultSettings,
     ...settings,
     notificationMode,
     voiceProvider,
+    voiceLanguage,
     voiceEnabled: notificationMode === "voice",
   };
 }

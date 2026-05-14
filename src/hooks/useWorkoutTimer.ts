@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { Language } from "../i18n/translations";
 import type { AppSettings } from "../models/settings";
 import type { WorkoutSession, WorkoutSessionStep } from "../models/session";
 import type { WorkoutPlan } from "../models/workout";
@@ -79,7 +80,11 @@ function resolveStepWeight(
   return weight === null ? undefined : weight;
 }
 
-function getWorkoutSpeechTexts(plan: WorkoutPlan, language: AppSettings["language"]): string[] {
+function resolveVoiceLanguage(settings: AppSettings): Language {
+  return settings.voiceLanguage === "app" ? settings.language : settings.voiceLanguage;
+}
+
+function getWorkoutSpeechTexts(plan: WorkoutPlan, language: Language): string[] {
   return [
     ...plan.steps.flatMap((step) => [
       getStepAnnouncement(step, language),
@@ -99,6 +104,7 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
   const completedStepKeysRef = useRef<Set<string>>(new Set());
   const completedStepRecordsRef = useRef<CompletedStepRecord[]>([]);
   const sessionSavedRef = useRef(false);
+  const voiceLanguage = resolveVoiceLanguage(settings);
 
   useEffect(() => {
     stateRef.current = state;
@@ -131,18 +137,18 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
       speak(text, {
         voiceProvider: settings.voiceProvider,
         voiceURI: settings.voiceURI,
-        language: settings.language,
+        language: voiceLanguage,
         rate: settings.voiceRate,
         pitch: settings.voicePitch,
         volume: settings.voiceVolume,
       });
     },
-    [settings],
+    [settings, voiceLanguage],
   );
 
   const speechTexts = useMemo(
-    () => getWorkoutSpeechTexts(plan, settings.language),
-    [plan, settings.language],
+    () => getWorkoutSpeechTexts(plan, voiceLanguage),
+    [plan, voiceLanguage],
   );
 
   useEffect(() => {
@@ -151,10 +157,10 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
     }
 
     prepareSpeech(speechTexts, {
-      language: settings.language,
+      language: voiceLanguage,
       voiceProvider: settings.voiceProvider,
     });
-  }, [settings.language, settings.notificationMode, settings.voiceProvider, speechTexts]);
+  }, [settings.notificationMode, settings.voiceProvider, speechTexts, voiceLanguage]);
 
   const recordStepCompletion = useCallback(
     (round: number, stepIndex: number) => {
@@ -206,9 +212,9 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
       remainingSeconds: 0,
       completedAt,
     });
-    notify("complete", getCompleteAnnouncement(settings.language));
+    notify("complete", getCompleteAnnouncement(voiceLanguage));
     void onComplete(session);
-  }, [notify, onComplete, plan, settings.language]);
+  }, [notify, onComplete, plan, voiceLanguage]);
 
   const beginStep = useCallback(
     (round: number, stepIndex: number, startedAt?: string) => {
@@ -219,7 +225,7 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
         return;
       }
 
-      notify("work", getStepAnnouncement(step, settings.language));
+      notify("work", getStepAnnouncement(step, voiceLanguage));
 
       if (step.type === "time") {
         targetEndTimeRef.current = Date.now() + step.durationSeconds * 1000;
@@ -250,7 +256,7 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
         completedAt: undefined,
       }));
     },
-    [completeWorkout, notify, plan, settings.language],
+    [completeWorkout, notify, plan, voiceLanguage],
   );
 
   const advanceAfterBreak = useCallback(
@@ -286,7 +292,7 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
         return;
       }
 
-      notify("rest", getBreakAnnouncement(step.breakSeconds, settings.language));
+      notify("rest", getBreakAnnouncement(step.breakSeconds, voiceLanguage));
       targetEndTimeRef.current = Date.now() + step.breakSeconds * 1000;
       setState((previousState) => ({
         ...previousState,
@@ -297,7 +303,7 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
         remainingSeconds: step.breakSeconds,
       }));
     },
-    [advanceAfterBreak, completeWorkout, notify, plan.steps, recordStepCompletion, settings.language],
+    [advanceAfterBreak, completeWorkout, notify, plan.steps, recordStepCompletion, voiceLanguage],
   );
 
   useEffect(() => {

@@ -89,7 +89,6 @@ export default function App() {
     void updateSettings({
       ...settings,
       language: settings.language === "fr" ? "en" : "fr",
-      voiceURI: undefined,
     });
   };
 

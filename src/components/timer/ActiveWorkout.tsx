@@ -336,9 +336,15 @@ function WorkoutRunner({
     settings.voiceProvider === "piper"
       ? t("settings.providerPiper")
       : t("settings.providerBrowser");
+  const voiceLanguageLabel =
+    settings.voiceLanguage === "app"
+      ? t("settings.voiceLanguageApp")
+      : settings.voiceLanguage === "fr"
+        ? t("settings.languageFrench")
+        : t("settings.languageEnglish");
   const audioMode =
     settings.notificationMode === "voice"
-      ? `${t("settings.modeVoice")} - ${voiceProviderLabel}`
+      ? `${t("settings.modeVoice")} - ${voiceProviderLabel} - ${voiceLanguageLabel}`
       : settings.notificationMode === "beep"
         ? t("settings.modeBeeps")
         : t("settings.modeOff");

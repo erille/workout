@@ -21,6 +21,7 @@ Workout is a local-first web app for building, running, and tracking workout ses
 - Completed workout history with workout/exercise filtering.
 - English and French interface.
 - Audio modes for local Piper TTS, browser voice, beeps, and silent workouts.
+- Separate app language and spoken announcement language.
 - Guest mode using browser localStorage.
 - Private mode using SQLite through the Node API.
 - Password login with Argon2 hash support.

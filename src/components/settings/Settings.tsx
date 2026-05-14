@@ -2,7 +2,12 @@ import { Save, Volume1, Volume2, VolumeX } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import { useI18n } from "../../i18n/I18nContext";
 import type { Language } from "../../i18n/translations";
-import type { AppSettings, NotificationMode, VoiceProvider } from "../../models/settings";
+import type {
+  AppSettings,
+  NotificationMode,
+  VoiceLanguage,
+  VoiceProvider,
+} from "../../models/settings";
 import { isAudioCueSupported, playAudioCue } from "../../services/audioCueService";
 import {
   getServerTtsStatus,
@@ -57,7 +62,8 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
   const isBeepMode = draft.notificationMode === "beep";
   const isBrowserVoiceProvider = draft.voiceProvider === "browser";
   const isPiperVoiceProvider = draft.voiceProvider === "piper";
-  const piperVoice = ttsStatus?.voices.find((voice) => voice.language === draft.language);
+  const effectiveVoiceLanguage = draft.voiceLanguage === "app" ? draft.language : draft.voiceLanguage;
+  const piperVoice = ttsStatus?.voices.find((voice) => voice.language === effectiveVoiceLanguage);
 
   useEffect(() => {
     setDraft(settings);
@@ -135,6 +141,14 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
     { value: "piper", label: t("settings.providerPiper") },
     { value: "browser", label: t("settings.providerBrowser") },
   ];
+  const voiceLanguageOptions: Array<{
+    value: VoiceLanguage;
+    label: string;
+  }> = [
+    { value: "app", label: t("settings.voiceLanguageApp") },
+    { value: "en", label: t("settings.languageEnglish") },
+    { value: "fr", label: t("settings.languageFrench") },
+  ];
   const piperStatusText =
     ttsStatus === undefined
       ? t("settings.piperChecking")
@@ -205,12 +219,7 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
           <select
             className="field"
             value={draft.language}
-            onChange={(event) =>
-              updateDraft({
-                language: event.target.value as Language,
-                voiceURI: undefined,
-              })
-            }
+            onChange={(event) => updateDraft({ language: event.target.value as Language })}
           >
             <option value="en">{t("settings.languageEnglish")}</option>
             <option value="fr">{t("settings.languageFrench")}</option>
@@ -218,27 +227,49 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
         </label>
 
         {isVoiceMode ? (
-          <label className="block space-y-2">
-            <span className="label">{t("settings.voiceProvider")}</span>
-            <select
-              className="field"
-              value={draft.voiceProvider}
-              onChange={(event) =>
-                updateDraft({
-                  voiceProvider: event.target.value as VoiceProvider,
-                })
-              }
-            >
-              {voiceProviderOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <p className="text-sm text-slate-400">
-              {isPiperVoiceProvider ? piperStatusText : t("settings.browserVoiceHelp")}
-            </p>
-          </label>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block space-y-2">
+              <span className="label">{t("settings.voiceProvider")}</span>
+              <select
+                className="field"
+                value={draft.voiceProvider}
+                onChange={(event) =>
+                  updateDraft({
+                    voiceProvider: event.target.value as VoiceProvider,
+                  })
+                }
+              >
+                {voiceProviderOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <p className="text-sm text-slate-400">
+                {isPiperVoiceProvider ? piperStatusText : t("settings.browserVoiceHelp")}
+              </p>
+            </label>
+            <label className="block space-y-2">
+              <span className="label">{t("settings.voiceLanguage")}</span>
+              <select
+                className="field"
+                value={draft.voiceLanguage}
+                onChange={(event) =>
+                  updateDraft({
+                    voiceLanguage: event.target.value as VoiceLanguage,
+                    voiceURI: undefined,
+                  })
+                }
+              >
+                {voiceLanguageOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <p className="text-sm text-slate-400">{t("settings.voiceLanguageHelp")}</p>
+            </label>
+          </div>
         ) : null}
 
         {isVoiceMode && isBrowserVoiceProvider ? (
@@ -273,7 +304,7 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
                   })
                 : t("settings.noVoices")}
             </p>
-            {draft.language === "fr" && voices.length > 0 && !hasFrenchVoice ? (
+            {effectiveVoiceLanguage === "fr" && voices.length > 0 && !hasFrenchVoice ? (
               <p className="text-sm text-amber-200">{t("settings.noFrenchVoice")}</p>
             ) : null}
           </label>
@@ -377,7 +408,7 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
                 speak(t("settings.previewText"), {
                   voiceProvider: draft.voiceProvider,
                   voiceURI: draft.voiceURI,
-                  language: draft.language,
+                  language: effectiveVoiceLanguage,
                   rate: draft.voiceRate,
                   pitch: draft.voicePitch,
                   volume: draft.voiceVolume,

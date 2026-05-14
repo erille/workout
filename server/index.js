@@ -295,12 +295,19 @@ function readSettings() {
     savedSettings.voiceProvider === "browser" || savedSettings.voiceProvider === "piper"
       ? savedSettings.voiceProvider
       : defaultSettings.voiceProvider;
+  const voiceLanguage =
+    savedSettings.voiceLanguage === "app" ||
+    savedSettings.voiceLanguage === "en" ||
+    savedSettings.voiceLanguage === "fr"
+      ? savedSettings.voiceLanguage
+      : defaultSettings.voiceLanguage;
 
   return {
     ...defaultSettings,
     ...savedSettings,
     notificationMode,
     voiceProvider,
+    voiceLanguage,
     voiceEnabled: notificationMode === "voice",
   };
 }
@@ -317,6 +324,12 @@ function writeSettings(settings) {
     settings.voiceProvider === "browser" || settings.voiceProvider === "piper"
       ? settings.voiceProvider
       : defaultSettings.voiceProvider;
+  const voiceLanguage =
+    settings.voiceLanguage === "app" ||
+    settings.voiceLanguage === "en" ||
+    settings.voiceLanguage === "fr"
+      ? settings.voiceLanguage
+      : defaultSettings.voiceLanguage;
 
   db.prepare(
     `INSERT INTO settings (id, data, updated_at)
@@ -327,6 +340,7 @@ function writeSettings(settings) {
     ...settings,
     notificationMode,
     voiceProvider,
+    voiceLanguage,
     voiceEnabled: notificationMode === "voice",
   }), new Date().toISOString());
 }

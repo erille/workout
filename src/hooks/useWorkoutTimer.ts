@@ -51,6 +51,7 @@ type CompletedStepRecord = {
 };
 
 const START_DELAY_SECONDS = 5;
+const STEP_ANNOUNCE_LEAD_SECONDS = 3;
 
 function createInitialState(plan: WorkoutPlan): WorkoutRuntimeState {
   return {
@@ -109,6 +110,7 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
   const targetEndTimeRef = useRef<number | null>(null);
   const completedStepKeysRef = useRef<Set<string>>(new Set());
   const completedStepRecordsRef = useRef<CompletedStepRecord[]>([]);
+  const announcedStepKeysRef = useRef<Set<string>>(new Set());
   const sessionSavedRef = useRef(false);
   const voiceLanguage = resolveVoiceLanguage(settings);
 
@@ -121,6 +123,7 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
     runtimeWeightsRef.current = {};
     completedStepKeysRef.current = new Set();
     completedStepRecordsRef.current = [];
+    announcedStepKeysRef.current = new Set();
     sessionSavedRef.current = false;
     setRuntimeWeights({});
     setCompletedStepsCount(0);
@@ -151,6 +154,59 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
       });
     },
     [settings, voiceLanguage],
+  );
+
+  const announceStep = useCallback(
+    (round: number, stepIndex: number) => {
+      if (settings.notificationMode !== "voice") {
+        return;
+      }
+
+      const step = plan.steps[stepIndex];
+      const key = createStepKey(round, stepIndex);
+
+      if (!step || announcedStepKeysRef.current.has(key)) {
+        return;
+      }
+
+      announcedStepKeysRef.current.add(key);
+      speak(getStepAnnouncement(step, voiceLanguage), {
+        voiceProvider: settings.voiceProvider,
+        voiceURI: settings.voiceURI,
+        language: voiceLanguage,
+        rate: settings.voiceRate,
+        pitch: settings.voicePitch,
+        volume: settings.voiceVolume,
+      });
+    },
+    [plan.steps, settings, voiceLanguage],
+  );
+
+  const announceUpcomingStep = useCallback(
+    (current: WorkoutRuntimeState, remainingSeconds: number) => {
+      if (remainingSeconds > STEP_ANNOUNCE_LEAD_SECONDS) {
+        return;
+      }
+
+      if (current.phase === "starting") {
+        announceStep(1, 0);
+        return;
+      }
+
+      if (current.phase !== "break") {
+        return;
+      }
+
+      if (current.currentStepIndex + 1 < plan.steps.length) {
+        announceStep(current.currentRound, current.currentStepIndex + 1);
+        return;
+      }
+
+      if (current.currentRound < plan.rounds) {
+        announceStep(current.currentRound + 1, 0);
+      }
+    },
+    [announceStep, plan.rounds, plan.steps.length],
   );
 
   const speechTexts = useMemo(
@@ -266,7 +322,14 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
         return;
       }
 
-      notify("work", getStepAnnouncement(step, voiceLanguage));
+      const key = createStepKey(round, stepIndex);
+
+      if (settings.notificationMode === "beep" || !announcedStepKeysRef.current.has(key)) {
+        notify("work", getStepAnnouncement(step, voiceLanguage));
+        if (settings.notificationMode === "voice") {
+          announcedStepKeysRef.current.add(key);
+        }
+      }
 
       if (step.type === "time") {
         targetEndTimeRef.current = Date.now() + step.durationSeconds * 1000;
@@ -297,7 +360,7 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
         completedAt: undefined,
       }));
     },
-    [completeWorkout, notify, plan, voiceLanguage],
+    [completeWorkout, notify, plan, settings.notificationMode, voiceLanguage],
   );
 
   const advanceAfterBreak = useCallback(
@@ -373,12 +436,14 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
             },
       );
 
+      const current = stateRef.current;
+
       if (remainingSeconds > 0) {
+        announceUpcomingStep(current, remainingSeconds);
         return;
       }
 
       targetEndTimeRef.current = null;
-      const current = stateRef.current;
 
       if (current.phase === "starting") {
         beginStep(1, 0, new Date().toISOString());
@@ -392,7 +457,15 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
     tick();
     const intervalId = window.setInterval(tick, 250);
     return () => window.clearInterval(intervalId);
-  }, [advanceAfterBreak, beginStep, moveToBreak, state.currentRound, state.currentStepIndex, state.phase]);
+  }, [
+    advanceAfterBreak,
+    announceUpcomingStep,
+    beginStep,
+    moveToBreak,
+    state.currentRound,
+    state.currentStepIndex,
+    state.phase,
+  ]);
 
   const startWorkout = useCallback(() => {
     if (plan.steps.length === 0) {
@@ -401,6 +474,7 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
 
     completedStepKeysRef.current = new Set();
     completedStepRecordsRef.current = [];
+    announcedStepKeysRef.current = new Set();
     runtimeWeightsRef.current = {};
     targetEndTimeRef.current = Date.now() + START_DELAY_SECONDS * 1000;
     setRuntimeWeights({});

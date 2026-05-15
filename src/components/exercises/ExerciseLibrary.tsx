@@ -428,14 +428,14 @@ export function ExerciseLibrary({
                 <p className="min-h-10 text-sm leading-6 text-slate-500">{t("exercises.noNotes")}</p>
               )}
 
-              <div className="mt-auto flex gap-2">
+              <div className="mt-auto flex justify-end gap-2">
                 <button
                   type="button"
-                  className="secondary-button flex-1"
+                  className="secondary-button px-3"
+                  aria-label={`${t("common.edit")} ${translateExerciseName(exercise, language)}`}
                   onClick={() => openEditForm(exercise)}
                 >
                   <Edit3 aria-hidden="true" size={16} />
-                  {t("common.edit")}
                 </button>
                 <button
                   type="button"

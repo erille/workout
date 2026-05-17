@@ -14,7 +14,7 @@ const translatedExerciseNames: Record<string, Record<Language, string>> = {
   },
   "exercise-bench-press": {
     en: "Bench Press",
-    fr: "Developpe couche",
+    fr: "Développé couché",
   },
   "exercise-squat": {
     en: "Squat",
@@ -22,7 +22,7 @@ const translatedExerciseNames: Record<string, Record<Language, string>> = {
   },
   "exercise-deadlift": {
     en: "Deadlift",
-    fr: "Souleve de terre",
+    fr: "Soulevé de terre",
   },
   "exercise-pull-up": {
     en: "Pull-up",
@@ -46,7 +46,7 @@ const translatedExerciseNames: Record<string, Record<Language, string>> = {
   },
   "exercise-shoulder-press": {
     en: "Shoulder Press",
-    fr: "Developpe epaules",
+    fr: "Développé épaules",
   },
   "exercise-row": {
     en: "Row",
@@ -74,7 +74,7 @@ const translatedExerciseNames: Record<string, Record<Language, string>> = {
   },
   "exercise-romanian-deadlift": {
     en: "Romanian Deadlift",
-    fr: "Souleve de terre roumain",
+    fr: "Soulevé de terre roumain",
   },
   "exercise-bicep-curl": {
     en: "Bicep Curl",
@@ -86,7 +86,7 @@ const translatedExerciseNames: Record<string, Record<Language, string>> = {
   },
   "exercise-side-plank": {
     en: "Side Plank",
-    fr: "Gainage lateral",
+    fr: "Gainage latéral",
   },
 };
 

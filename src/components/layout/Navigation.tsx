@@ -3,6 +3,7 @@ import {
   Download,
   Globe2,
   History,
+  House,
   Info,
   Library,
   ListChecks,
@@ -21,6 +22,7 @@ import { useI18n } from "../../i18n/I18nContext";
 import { exportLocalData, importLocalData, type StorageMode } from "../../data/storage";
 
 export type PageId =
+  | "home"
   | "exercises"
   | "builder"
   | "timer"
@@ -42,6 +44,7 @@ type NavigationProps = {
 };
 
 const navItems = [
+  { id: "home", labelKey: "nav.home", icon: House },
   { id: "exercises", labelKey: "nav.exercises", icon: Library },
   { id: "builder", labelKey: "nav.builder", icon: ListChecks },
   { id: "timer", labelKey: "nav.timer", icon: Timer },

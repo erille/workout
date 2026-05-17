@@ -3,6 +3,7 @@ import { LoginPage } from "../components/auth/LoginPage";
 import { CharacterSheet } from "../components/character/CharacterSheet";
 import { ExerciseLibrary } from "../components/exercises/ExerciseLibrary";
 import { WorkoutHistory } from "../components/history/WorkoutHistory";
+import { HomeDashboard } from "../components/home/HomeDashboard";
 import { Navigation, type PageId } from "../components/layout/Navigation";
 import { SettingsPage } from "../components/settings/Settings";
 import { StatisticsPage } from "../components/statistics/StatisticsPage";
@@ -126,6 +127,9 @@ export default function App() {
               onNavigate={setCurrentPage}
             />
             <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+              {currentPage === "home" && (
+                <HomeDashboard profile={profile} sessions={sessions} />
+              )}
               {currentPage === "exercises" && (
                 <ExerciseLibrary
                   exercises={exercises}

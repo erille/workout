@@ -21,7 +21,7 @@ import type { WorkoutSession } from "../models/session";
 import type { WorkoutPlan } from "../models/workout";
 
 export default function App() {
-  const [currentPage, setCurrentPage] = useState<PageId>("exercises");
+  const [currentPage, setCurrentPage] = useState<PageId>("home");
   const [activePlan, setActivePlan] = useState<WorkoutPlan | null>(null);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const { status: authStatus, isLoading: authLoading, login, logout } = useAuth();

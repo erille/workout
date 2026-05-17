@@ -374,20 +374,6 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
           </label>
         ) : null}
 
-        <label className="block space-y-2">
-          <span className="label">{t("settings.theme")}</span>
-          <select
-            className="field"
-            value={draft.theme}
-            onChange={(event) =>
-              updateDraft({ theme: event.target.value as AppSettings["theme"] })
-            }
-          >
-            <option value="dark">{t("settings.dark")}</option>
-            <option value="light">{t("settings.light")}</option>
-          </select>
-        </label>
-
         {message ? (
           <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100">
             {message}

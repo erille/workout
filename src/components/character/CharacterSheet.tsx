@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { useI18n } from "../../i18n/I18nContext";
+import type { Language } from "../../i18n/translations";
 import type {
   BodyMeasurement,
   CharacterProfile,
@@ -129,6 +130,78 @@ function optionalDateInputValue(value?: string): string {
   const date = new Date(value);
 
   return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10);
+}
+
+function birthDatePlaceholder(language: Language): string {
+  return language === "fr" ? "DD/MM/YY" : "MM/DD/YY";
+}
+
+function expandBirthYear(yearPart: string): number {
+  if (yearPart.length === 4) {
+    return Number(yearPart);
+  }
+
+  const year = Number(yearPart);
+  const currentYear = new Date().getFullYear();
+  const currentTwoDigitYear = currentYear % 100;
+
+  return year <= currentTwoDigitYear ? 2000 + year : 1900 + year;
+}
+
+function createIsoDate(year: number, month: number, day: number): string | null {
+  const date = new Date(year, month - 1, day);
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
+
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day ||
+    date > today
+  ) {
+    return null;
+  }
+
+  const paddedYear = String(year).padStart(4, "0");
+  const paddedMonth = String(month).padStart(2, "0");
+  const paddedDay = String(day).padStart(2, "0");
+
+  return `${paddedYear}-${paddedMonth}-${paddedDay}`;
+}
+
+function parseBirthDateInput(value: string, language: Language): string | null | undefined {
+  const trimmedValue = value.trim();
+
+  if (!trimmedValue) {
+    return undefined;
+  }
+
+  const match = /^(\d{1,2})[./-](\d{1,2})[./-](\d{2}|\d{4})$/.exec(trimmedValue);
+
+  if (!match) {
+    return null;
+  }
+
+  const firstPart = Number(match[1]);
+  const secondPart = Number(match[2]);
+  const year = expandBirthYear(match[3]);
+  const month = language === "fr" ? secondPart : firstPart;
+  const day = language === "fr" ? firstPart : secondPart;
+
+  return createIsoDate(year, month, day);
+}
+
+function formatBirthDateInput(value: string | undefined, language: Language): string {
+  const dateValue = optionalDateInputValue(value);
+
+  if (!dateValue) {
+    return "";
+  }
+
+  const [year, month, day] = dateValue.split("-");
+  const shortYear = year.slice(-2);
+
+  return language === "fr" ? `${day}/${month}/${shortYear}` : `${month}/${day}/${shortYear}`;
 }
 
 function parseOptionalNumber(value: string): number | undefined {
@@ -436,12 +509,16 @@ function resizePhoto(file: File): Promise<string> {
 }
 
 export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) {
-  const { t } = useI18n();
+  const { language, t } = useI18n();
   const [draft, setDraft] = useState<CharacterProfile>(profile);
+  const [birthDateInput, setBirthDateInput] = useState(() =>
+    formatBirthDateInput(profile.dateOfBirth, language),
+  );
   const [measurementDraft, setMeasurementDraft] = useState<MeasurementDraft>(createEmptyMeasurementDraft);
   const [editingMeasurementId, setEditingMeasurementId] = useState<string | null>(null);
   const [timelineView, setTimelineView] = useState<TimelineView>("history");
   const [profileMessage, setProfileMessage] = useState<string | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
   const [measurementMessage, setMeasurementMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isAvatarMenuOpen, setIsAvatarMenuOpen] = useState(false);
@@ -450,7 +527,12 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
 
   useEffect(() => {
     setDraft(profile);
+    setBirthDateInput(formatBirthDateInput(profile.dateOfBirth, language));
   }, [profile]);
+
+  useEffect(() => {
+    setBirthDateInput(formatBirthDateInput(draft.dateOfBirth, language));
+  }, [language]);
 
   useEffect(() => {
     if (!isAvatarMenuOpen) {
@@ -503,7 +585,31 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
   const updateDraft = (partial: Partial<CharacterProfile>) => {
     setDraft((current) => ({ ...current, ...partial }));
     setProfileMessage(null);
+    setProfileError(null);
     setError(null);
+  };
+
+  const handleBirthDateChange = (value: string) => {
+    const parsedDate = parseBirthDateInput(value, language);
+
+    setBirthDateInput(value);
+
+    if (parsedDate !== null) {
+      updateDraft({ dateOfBirth: parsedDate, age: undefined });
+      return;
+    }
+
+    setProfileMessage(null);
+    setProfileError(null);
+    setError(null);
+  };
+
+  const normalizeBirthDateInput = () => {
+    const parsedDate = parseBirthDateInput(birthDateInput, language);
+
+    if (parsedDate !== null) {
+      setBirthDateInput(formatBirthDateInput(parsedDate, language));
+    }
   };
 
   const updateBuiltInAvatar = (avatar: BuiltInAvatar) => {
@@ -515,6 +621,7 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
     }));
     setIsAvatarMenuOpen(false);
     setProfileMessage(null);
+    setProfileError(null);
     setError(null);
   };
 
@@ -524,6 +631,7 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
       photoDataUrl,
     }));
     setProfileMessage(null);
+    setProfileError(null);
     setError(null);
   };
 
@@ -535,19 +643,36 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
     }
 
     if (!file.type.startsWith("image/")) {
-      setError(t("character.photoError"));
+      setProfileError(t("character.photoError"));
       return;
     }
 
     void resizePhoto(file)
       .then(updatePhoto)
-      .catch(() => setError(t("character.photoError")));
+      .catch(() => setProfileError(t("character.photoError")));
     event.target.value = "";
   };
 
   const saveProfile = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    await onSaveProfile(draft);
+    const parsedBirthDate = parseBirthDateInput(birthDateInput, language);
+
+    if (parsedBirthDate === null) {
+      setProfileError(t("character.birthDateError", { format: birthDatePlaceholder(language) }));
+      return;
+    }
+
+    const nextProfile = {
+      ...draft,
+      dateOfBirth: parsedBirthDate,
+      age: undefined,
+    };
+
+    await onSaveProfile(nextProfile);
+    setDraft(nextProfile);
+    setBirthDateInput(formatBirthDateInput(nextProfile.dateOfBirth, language));
+    setProfileError(null);
+    setError(null);
     setProfileMessage(t("character.profileSaved"));
   };
 
@@ -740,15 +865,12 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
               <span className="label">{t("character.dateOfBirth")}</span>
               <input
                 className="field"
-                max={todayInputValue()}
-                type="date"
-                value={optionalDateInputValue(draft.dateOfBirth)}
-                onChange={(event) =>
-                  updateDraft({
-                    dateOfBirth: event.target.value || undefined,
-                    age: undefined,
-                  })
-                }
+                inputMode="numeric"
+                placeholder={birthDatePlaceholder(language)}
+                type="text"
+                value={birthDateInput}
+                onBlur={normalizeBirthDateInput}
+                onChange={(event) => handleBirthDateChange(event.target.value)}
               />
             </label>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -768,6 +890,11 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
             {profileMessage ? (
               <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100">
                 {profileMessage}
+              </div>
+            ) : null}
+            {profileError ? (
+              <div className="rounded-md border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
+                {profileError}
               </div>
             ) : null}
             <button type="submit" className="primary-button w-full">

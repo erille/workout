@@ -14,7 +14,6 @@ export type AppSettings = {
   voicePitch: number;
   voiceVolume: number;
   language: Language;
-  theme: "dark" | "light";
   exerciseDefaultsVersion: number;
 };
 
@@ -27,6 +26,5 @@ export const defaultSettings: AppSettings = {
   voicePitch: 1,
   voiceVolume: 1,
   language: "fr",
-  theme: "dark",
   exerciseDefaultsVersion: 1,
 };

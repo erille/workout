@@ -124,7 +124,6 @@ export const defaultSettings = {
   voicePitch: 1,
   voiceVolume: 1,
   language: "fr",
-  theme: "dark",
   exerciseDefaultsVersion: 1,
 };
 

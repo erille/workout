@@ -170,7 +170,11 @@ export default function App() {
                 <CharacterSheet profile={profile} onSaveProfile={updateProfile} />
               )}
               {currentPage === "settings" && (
-                <SettingsPage settings={settings} onSaveSettings={updateSettings} />
+                <SettingsPage
+                  settings={settings}
+                  storageMode={storageMode}
+                  onSaveSettings={updateSettings}
+                />
               )}
             </main>
             {isLoginOpen ? (

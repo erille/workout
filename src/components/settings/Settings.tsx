@@ -1,5 +1,6 @@
-import { Save, Volume1, Volume2, VolumeX } from "lucide-react";
-import { FormEvent, useEffect, useState } from "react";
+import { Download, Save, Upload, Volume1, Volume2, VolumeX } from "lucide-react";
+import { type ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
+import { exportLocalData, importLocalData, type StorageMode } from "../../data/storage";
 import { useI18n } from "../../i18n/I18nContext";
 import type { Language } from "../../i18n/translations";
 import type {
@@ -20,6 +21,7 @@ import {
 
 type SettingsPageProps = {
   settings: AppSettings;
+  storageMode: StorageMode;
   onSaveSettings: (settings: AppSettings) => Promise<void>;
 };
 
@@ -49,12 +51,13 @@ function notificationIcon(mode: NotificationMode) {
   return <Volume2 aria-hidden="true" size={22} />;
 }
 
-export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
+export function SettingsPage({ onSaveSettings, settings, storageMode }: SettingsPageProps) {
   const { t } = useI18n();
   const [draft, setDraft] = useState<AppSettings>(settings);
   const [message, setMessage] = useState<string | null>(null);
   const [ttsStatus, setTtsStatus] = useState<ServerTtsStatus | null | undefined>(undefined);
   const [voices, setVoices] = useState<SpeechVoiceOption[]>([]);
+  const importInputRef = useRef<HTMLInputElement>(null);
   const speechSupported = isSpeechSupported();
   const audioCueSupported = isAudioCueSupported();
   const hasFrenchVoice = voices.some((voice) => voice.lang.toLowerCase().startsWith("fr"));
@@ -125,6 +128,43 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
     });
   };
 
+  const handleExportLocalData = async () => {
+    const exportData = await exportLocalData();
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    const dateStamp = new Date().toISOString().slice(0, 10);
+
+    anchor.href = url;
+    anchor.download = `workout-backup-${dateStamp}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportLocalData = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    if (!window.confirm(t("localData.importConfirm"))) {
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      await importLocalData(JSON.parse(text));
+      window.alert(t("localData.importSuccess"));
+      window.location.reload();
+    } catch {
+      window.alert(t("localData.importError"));
+    }
+  };
+
   const notificationOptions: Array<{
     mode: NotificationMode;
     label: string;
@@ -176,6 +216,45 @@ export function SettingsPage({ onSaveSettings, settings }: SettingsPageProps) {
         <p className="label">{t("settings.section")}</p>
         <h2 className="text-2xl font-bold text-slate-50">{t("settings.title")}</h2>
       </div>
+
+      {storageMode === "local" ? (
+        <div className="panel space-y-4 p-4 sm:p-6">
+          <div>
+            <p className="label">{t("localData.section")}</p>
+            <h3 className="text-xl font-bold text-slate-50">{t("localData.title")}</h3>
+            <p className="mt-1 text-sm text-slate-400">{t("localData.description")}</p>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => {
+                void handleExportLocalData();
+              }}
+            >
+              <Download aria-hidden="true" size={17} />
+              {t("localData.export")}
+            </button>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => importInputRef.current?.click()}
+            >
+              <Upload aria-hidden="true" size={17} />
+              {t("localData.import")}
+            </button>
+            <input
+              ref={importInputRef}
+              className="hidden"
+              accept="application/json,.json"
+              type="file"
+              onChange={(event) => {
+                void handleImportLocalData(event);
+              }}
+            />
+          </div>
+        </div>
+      ) : null}
 
       <form className="panel space-y-5 p-4 sm:p-6" onSubmit={handleSubmit}>
         <div className="space-y-4 rounded-lg border border-slate-800 bg-slate-950/70 p-4">

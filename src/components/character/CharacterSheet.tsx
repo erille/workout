@@ -133,19 +133,7 @@ function optionalDateInputValue(value?: string): string {
 }
 
 function birthDatePlaceholder(language: Language): string {
-  return language === "fr" ? "DD/MM/YY" : "MM/DD/YY";
-}
-
-function expandBirthYear(yearPart: string): number {
-  if (yearPart.length === 4) {
-    return Number(yearPart);
-  }
-
-  const year = Number(yearPart);
-  const currentYear = new Date().getFullYear();
-  const currentTwoDigitYear = currentYear % 100;
-
-  return year <= currentTwoDigitYear ? 2000 + year : 1900 + year;
+  return language === "fr" ? "DD/MM/YYYY" : "MM/DD/YYYY";
 }
 
 function createIsoDate(year: number, month: number, day: number): string | null {
@@ -176,7 +164,7 @@ function parseBirthDateInput(value: string, language: Language): string | null |
     return undefined;
   }
 
-  const match = /^(\d{1,2})[./-](\d{1,2})[./-](\d{2}|\d{4})$/.exec(trimmedValue);
+  const match = /^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/.exec(trimmedValue);
 
   if (!match) {
     return null;
@@ -184,7 +172,7 @@ function parseBirthDateInput(value: string, language: Language): string | null |
 
   const firstPart = Number(match[1]);
   const secondPart = Number(match[2]);
-  const year = expandBirthYear(match[3]);
+  const year = Number(match[3]);
   const month = language === "fr" ? secondPart : firstPart;
   const day = language === "fr" ? firstPart : secondPart;
 
@@ -199,9 +187,7 @@ function formatBirthDateInput(value: string | undefined, language: Language): st
   }
 
   const [year, month, day] = dateValue.split("-");
-  const shortYear = year.slice(-2);
-
-  return language === "fr" ? `${day}/${month}/${shortYear}` : `${month}/${day}/${shortYear}`;
+  return language === "fr" ? `${day}/${month}/${year}` : `${month}/${day}/${year}`;
 }
 
 function parseOptionalNumber(value: string): number | undefined {
@@ -528,7 +514,7 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
   useEffect(() => {
     setDraft(profile);
     setBirthDateInput(formatBirthDateInput(profile.dateOfBirth, language));
-  }, [profile]);
+  }, [language, profile]);
 
   useEffect(() => {
     setBirthDateInput(formatBirthDateInput(draft.dateOfBirth, language));

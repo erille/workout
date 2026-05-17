@@ -146,7 +146,6 @@ function parseOptionalWeight(value: string): number | undefined {
 type SortableStepProps = {
   step: WorkoutStep;
   index: number;
-  defaults: StepDefaults;
   onDuplicate: (stepId: string) => void;
   onRemove: (stepId: string) => void;
   onChangeType: (stepId: string, type: WorkoutStep["type"]) => void;
@@ -156,7 +155,6 @@ type SortableStepProps = {
 function SortableStep({
   step,
   index,
-  defaults,
   onChangeType,
   onDuplicate,
   onRemove,
@@ -332,16 +330,6 @@ function SortableStep({
             <Trash2 aria-hidden="true" size={17} />
           </button>
         </div>
-      </div>
-
-      <div className="mt-3 text-xs text-slate-500">
-        {t("builder.defaults", {
-          duration: defaults.durationSeconds,
-          reps: defaults.reps,
-          meters: defaults.distanceMeters,
-          breakSeconds: defaults.breakSeconds,
-          weight: typeof defaults.weight === "number" ? ` - ${defaults.weight} kg` : "",
-        })}
       </div>
     </article>
   );
@@ -925,7 +913,6 @@ export function WorkoutBuilder({
                   {draft.steps.map((step, index) => (
                     <SortableStep
                       key={step.id}
-                      defaults={defaults}
                       index={index}
                       step={step}
                       onChangeType={changeStepType}

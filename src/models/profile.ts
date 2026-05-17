@@ -28,6 +28,8 @@ export type BodyMeasurement = {
 
 export type CharacterProfile = {
   name: string;
+  dateOfBirth?: string;
+  /** Legacy fallback used only when older saved profiles do not have a birth date yet. */
   age?: number;
   heightCm?: number;
   selectedAvatarId?: string;

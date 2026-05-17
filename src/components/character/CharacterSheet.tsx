@@ -121,6 +121,40 @@ function dateInputValue(value: string): string {
   return Number.isNaN(date.getTime()) ? todayInputValue() : date.toISOString().slice(0, 10);
 }
 
+function optionalDateInputValue(value?: string): string {
+  if (!value) {
+    return "";
+  }
+
+  const date = new Date(value);
+
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10);
+}
+
+function calculateAge(dateOfBirth?: string, fallbackAge?: number): number | undefined {
+  const birthDateValue = optionalDateInputValue(dateOfBirth);
+
+  if (!birthDateValue) {
+    return fallbackAge;
+  }
+
+  const [year, month, day] = birthDateValue.split("-").map(Number);
+
+  if (!year || !month || !day) {
+    return fallbackAge;
+  }
+
+  const today = new Date();
+  let age = today.getFullYear() - year;
+  const birthdayThisYear = new Date(today.getFullYear(), month - 1, day);
+
+  if (today < birthdayThisYear) {
+    age -= 1;
+  }
+
+  return age >= 0 ? age : undefined;
+}
+
 function parseOptionalNumber(value: string): number | undefined {
   const parsed = Number(value);
   return value.trim() === "" || !Number.isFinite(parsed) ? undefined : Math.max(0, parsed);
@@ -482,6 +516,7 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
     ) ??
     builtInAvatars[0];
   const selectedAvatarUrl = selectedAvatar?.url ?? "";
+  const calculatedAge = calculateAge(draft.dateOfBirth, draft.age);
   const metricLabels = useMemo(
     () =>
       Object.fromEntries(
@@ -726,18 +761,27 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
                 placeholder={t("character.namePlaceholder")}
               />
             </label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-3 sm:grid-cols-3">
               <label className="space-y-2">
-                <span className="label">{t("character.age")}</span>
+                <span className="label">{t("character.dateOfBirth")}</span>
                 <input
                   className="field"
-                  min={0}
-                  type="number"
-                  value={draft.age ?? ""}
+                  max={todayInputValue()}
+                  type="date"
+                  value={optionalDateInputValue(draft.dateOfBirth)}
                   onChange={(event) =>
-                    updateDraft({ age: parseOptionalNumber(event.target.value) })
+                    updateDraft({
+                      dateOfBirth: event.target.value || undefined,
+                      age: undefined,
+                    })
                   }
                 />
+              </label>
+              <label className="space-y-2">
+                <span className="label">{t("character.age")}</span>
+                <div className="field flex min-h-10 items-center" aria-live="polite">
+                  {calculatedAge ?? "-"}
+                </div>
               </label>
               <label className="space-y-2">
                 <span className="label">{t("character.heightCm")}</span>

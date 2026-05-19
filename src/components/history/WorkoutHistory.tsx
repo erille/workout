@@ -15,17 +15,30 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { CalendarPlus, Copy, Edit3, GripVertical, Plus, Save, Search, Trash2, X } from "lucide-react";
+import {
+  CalendarPlus,
+  Copy,
+  Edit3,
+  GripVertical,
+  ListChecks,
+  Plus,
+  Save,
+  Search,
+  Trash2,
+  X,
+} from "lucide-react";
 import { type CSSProperties, FormEvent, type ReactNode, useMemo, useState } from "react";
 import { useI18n } from "../../i18n/I18nContext";
 import { translateExerciseName } from "../../i18n/exerciseNames";
 import type { Exercise } from "../../models/exercise";
 import type { WorkoutSession, WorkoutSessionStep } from "../../models/session";
+import type { WorkoutPlan, WorkoutStep } from "../../models/workout";
 import { formatDateTime, formatSeconds, getElapsedSeconds } from "../../utils/format";
 import { createId } from "../../utils/id";
 
 type WorkoutHistoryProps = {
   exercises: Exercise[];
+  plans: WorkoutPlan[];
   sessions: WorkoutSession[];
   onDeleteSession: (sessionId: string) => Promise<void>;
   onSaveSession: (session: WorkoutSession) => Promise<void>;
@@ -80,6 +93,37 @@ function createManualStepFromSessionStep(step: WorkoutSessionStep): ManualStepFo
     breakSeconds: step.breakSeconds,
     weight: typeof step.weight === "number" ? String(step.weight) : "",
   };
+}
+
+function createManualStepFromPlanStep(step: WorkoutStep, round: number): ManualStepForm {
+  return {
+    id: createId("manual-step"),
+    exerciseName: step.exerciseName,
+    type: step.type,
+    durationSeconds: step.type === "time" ? step.durationSeconds : 60,
+    reps: step.type === "reps" ? step.reps : 10,
+    distanceMeters: step.type === "distance" ? step.distanceMeters : 500,
+    round,
+    breakSeconds: step.breakSeconds,
+    weight: typeof step.weight === "number" ? String(step.weight) : "",
+  };
+}
+
+function createManualStepsFromPlan(plan: WorkoutPlan): ManualStepForm[] {
+  return Array.from({ length: Math.max(1, Math.round(plan.rounds)) }).flatMap((_, roundIndex) =>
+    plan.steps.map((step) => createManualStepFromPlanStep(step, roundIndex + 1)),
+  );
+}
+
+function estimatePlanDurationMinutes(plan: WorkoutPlan): number {
+  const roundCount = Math.max(1, Math.round(plan.rounds));
+  const secondsPerRound = plan.steps.reduce((totalSeconds, step) => {
+    const workSeconds = step.type === "time" ? step.durationSeconds : 60;
+
+    return totalSeconds + workSeconds + step.breakSeconds;
+  }, 0);
+
+  return Math.max(1, Math.round((secondsPerRound * roundCount) / 60));
 }
 
 function toDateTimeInputValue(date: Date): string {
@@ -140,6 +184,7 @@ export function WorkoutHistory({
   exercises,
   onDeleteSession,
   onSaveSession,
+  plans,
   sessions,
 }: WorkoutHistoryProps) {
   const { language, t } = useI18n();
@@ -147,9 +192,11 @@ export function WorkoutHistory({
   const [isManualOpen, setIsManualOpen] = useState(false);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [manualWorkoutName, setManualWorkoutName] = useState(t("history.manualDefaultName"));
+  const [manualWorkoutPlanId, setManualWorkoutPlanId] = useState<string | undefined>(undefined);
   const [manualStartedAt, setManualStartedAt] = useState(() => toDateTimeInputValue(new Date()));
   const [manualDurationMinutes, setManualDurationMinutes] = useState(60);
   const [manualSteps, setManualSteps] = useState<ManualStepForm[]>(() => [createManualStep()]);
+  const [selectedPlanId, setSelectedPlanId] = useState("");
   const [manualError, setManualError] = useState<string | null>(null);
   const [manualMessage, setManualMessage] = useState<string | null>(null);
   const [isSavingManual, setIsSavingManual] = useState(false);
@@ -188,17 +235,21 @@ export function WorkoutHistory({
   const resetManualForm = () => {
     setEditingSessionId(null);
     setManualWorkoutName(t("history.manualDefaultName"));
+    setManualWorkoutPlanId(undefined);
     setManualStartedAt(toDateTimeInputValue(new Date()));
     setManualDurationMinutes(60);
     setManualSteps([createManualStep()]);
+    setSelectedPlanId("");
     setManualError(null);
   };
 
   const editSession = (session: WorkoutSession) => {
     setEditingSessionId(session.id);
     setManualWorkoutName(session.workoutName);
+    setManualWorkoutPlanId(session.workoutPlanId);
     setManualStartedAt(toDateTimeInputValue(new Date(session.startedAt)));
     setManualDurationMinutes(getSessionDurationMinutes(session));
+    setSelectedPlanId(session.workoutPlanId ?? "");
     setManualSteps(
       session.steps.length > 0 ? session.steps.map(createManualStepFromSessionStep) : [createManualStep()],
     );
@@ -213,6 +264,29 @@ export function WorkoutHistory({
     );
     setManualError(null);
     setManualMessage(null);
+  };
+
+  const loadSelectedPlan = () => {
+    const selectedPlan = plans.find((plan) => plan.id === selectedPlanId);
+
+    if (!selectedPlan) {
+      return;
+    }
+
+    const importedSteps = createManualStepsFromPlan(selectedPlan);
+
+    if (importedSteps.length === 0) {
+      setManualError(t("history.planErrorEmpty"));
+      setManualMessage(null);
+      return;
+    }
+
+    setManualWorkoutName(selectedPlan.name);
+    setManualWorkoutPlanId(selectedPlan.id);
+    setManualDurationMinutes(estimatePlanDurationMinutes(selectedPlan));
+    setManualSteps(importedSteps);
+    setManualError(null);
+    setManualMessage(t("history.planLoaded", { name: selectedPlan.name }));
   };
 
   const addManualStep = () => {
@@ -352,7 +426,7 @@ export function WorkoutHistory({
       : undefined;
     const session: WorkoutSession = {
       id: existingSession?.id ?? createId("session"),
-      workoutPlanId: existingSession?.workoutPlanId,
+      workoutPlanId: manualWorkoutPlanId,
       workoutName,
       startedAt: startedAt.toISOString(),
       completedAt: completedAt.toISOString(),
@@ -440,6 +514,45 @@ export function WorkoutHistory({
               <X aria-hidden="true" size={17} />
             </button>
           </div>
+
+          {!editingSessionId ? (
+            <div className="rounded-md border border-slate-800 bg-slate-950/70 p-3">
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+                <label className="space-y-2">
+                  <span className="label">{t("history.loadBuild")}</span>
+                  <select
+                    className="field"
+                    value={selectedPlanId}
+                    onChange={(event) => {
+                      setSelectedPlanId(event.target.value);
+                      setManualError(null);
+                      setManualMessage(null);
+                    }}
+                    disabled={plans.length === 0}
+                  >
+                    <option value="">
+                      {plans.length === 0 ? t("history.noBuilds") : t("history.chooseBuild")}
+                    </option>
+                    {plans.map((plan) => (
+                      <option key={plan.id} value={plan.id}>
+                        {plan.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={!selectedPlanId}
+                  onClick={loadSelectedPlan}
+                >
+                  <ListChecks aria-hidden="true" size={17} />
+                  {t("history.loadBuildButton")}
+                </button>
+              </div>
+              <p className="mt-2 text-sm text-slate-400">{t("history.loadBuildDescription")}</p>
+            </div>
+          ) : null}
 
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_13rem_10rem]">
             <label className="space-y-2">

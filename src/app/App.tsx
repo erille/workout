@@ -169,6 +169,7 @@ export default function App() {
               {currentPage === "history" && (
                 <WorkoutHistory
                   exercises={exercises}
+                  plans={plans}
                   sessions={sessions}
                   onDeleteSession={deleteSession}
                   onSaveSession={addSession}

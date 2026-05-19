@@ -17,6 +17,7 @@ import { useSettings } from "../hooks/useSettings";
 import { useWorkoutPlans } from "../hooks/useWorkoutPlans";
 import { I18nProvider, translate } from "../i18n/I18nContext";
 import type { StorageMode } from "../data/storage";
+import type { ExerciseCategoryDefinition } from "../models/exercise";
 import type { WorkoutSession } from "../models/session";
 import type { WorkoutPlan } from "../models/workout";
 
@@ -94,7 +95,7 @@ export default function App() {
     });
   };
 
-  const updateExerciseCategories = async (exerciseCategories: string[]) => {
+  const updateExerciseCategories = async (exerciseCategories: ExerciseCategoryDefinition[]) => {
     await updateSettings({
       ...settings,
       exerciseCategories,

@@ -1,23 +1,26 @@
 import { Edit3, Plus, Save, Search, Tags, Trash2, X } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../../i18n/I18nContext";
-import type { TranslationKey } from "../../i18n/translations";
+import type { Language, TranslationKey } from "../../i18n/translations";
 import { translateExerciseName } from "../../i18n/exerciseNames";
 import {
+  createExerciseCategoryDefinition,
   type Exercise,
   type ExerciseCategory,
+  type ExerciseCategoryDefinition,
   type ExerciseMode,
   isDefaultExerciseCategory,
-  normalizeExerciseCategories,
+  normalizeCategoryInput,
+  normalizeExerciseCategoryDefinitions,
 } from "../../models/exercise";
 import { createId } from "../../utils/id";
 
 type ExerciseLibraryProps = {
-  categories: string[];
+  categories: ExerciseCategoryDefinition[];
   exercises: Exercise[];
   onSaveExercise: (exercise: Exercise) => Promise<void>;
   onSaveExercises: (exercises: Exercise[]) => Promise<void>;
-  onSaveCategories: (categories: string[]) => Promise<void>;
+  onSaveCategories: (categories: ExerciseCategoryDefinition[]) => Promise<void>;
   onDeleteExercise: (exerciseId: string) => Promise<void>;
 };
 
@@ -72,20 +75,26 @@ function modeLabel(mode: ExerciseMode, labels: { time: string; reps: string; dis
   return mode === "distance" ? labels.distance : labels.reps;
 }
 
-function normalizeCategoryInput(value: string): string {
-  return value.trim().replace(/\s+/g, " ");
-}
-
 function normalizedCategoryKey(value: string): string {
   return normalizeCategoryInput(value).toLowerCase();
 }
 
-function categoryLabel(category: string, t: ReturnType<typeof useI18n>["t"]): string {
-  if (isDefaultExerciseCategory(category)) {
-    return t(`category.${category}` as TranslationKey);
+function categoryLabel(
+  category: ExerciseCategoryDefinition,
+  language: Language,
+  t: ReturnType<typeof useI18n>["t"],
+): string {
+  const localizedLabel = category.labels[language];
+
+  if (localizedLabel) {
+    return localizedLabel;
   }
 
-  return category;
+  if (isDefaultExerciseCategory(category.id)) {
+    return t(`category.${category.id}` as TranslationKey);
+  }
+
+  return category.labels.fr ?? category.labels.en ?? category.id;
 }
 
 export function ExerciseLibrary({
@@ -113,11 +122,31 @@ export function ExerciseLibrary({
   const formPopoverRef = useRef<HTMLDivElement>(null);
 
   const visibleCategories = useMemo(() => {
-    return normalizeExerciseCategories([
-      ...categories,
-      ...exercises.map((exercise) => exercise.category),
-    ]);
-  }, [categories, exercises]);
+    const configuredCategories = normalizeExerciseCategoryDefinitions(categories, language);
+    const configuredCategoryIds = new Set(configuredCategories.map((category) => category.id));
+    const exerciseOnlyCategories = exercises
+      .filter((exercise) => !configuredCategoryIds.has(exercise.category))
+      .map((exercise) => ({
+        id: exercise.category,
+        labels: { [language]: exercise.category },
+      }));
+
+    return normalizeExerciseCategoryDefinitions(
+      [...configuredCategories, ...exerciseOnlyCategories],
+      language,
+    );
+  }, [categories, exercises, language]);
+
+  const categoryLabelsById = useMemo(() => {
+    return new Map(
+      visibleCategories.map((category) => [
+        category.id,
+        categoryLabel(category, language, t),
+      ]),
+    );
+  }, [language, t, visibleCategories]);
+
+  const getCategoryLabel = (categoryId: string) => categoryLabelsById.get(categoryId) ?? categoryId;
 
   const filteredExercises = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -128,7 +157,7 @@ export function ExerciseLibrary({
 
     return exercises.filter((exercise) => {
       const translatedName = translateExerciseName(exercise, language).toLowerCase();
-      const translatedCategory = categoryLabel(exercise.category, t).toLowerCase();
+      const translatedCategory = getCategoryLabel(exercise.category).toLowerCase();
 
       return (
         exercise.name.toLowerCase().includes(normalizedQuery) ||
@@ -138,24 +167,27 @@ export function ExerciseLibrary({
         exercise.defaultMode.includes(normalizedQuery)
       );
     });
-  }, [exercises, language, query, t]);
+  }, [categoryLabelsById, exercises, language, query]);
 
   useEffect(() => {
     setCategoryDrafts(
       Object.fromEntries(
-        visibleCategories.map((category) => [category, categoryLabel(category, t)]),
+        visibleCategories.map((category) => [
+          category.id,
+          categoryLabel(category, language, t),
+        ]),
       ),
     );
-  }, [t, visibleCategories]);
+  }, [language, t, visibleCategories]);
 
   useEffect(() => {
-    if (visibleCategories.includes(form.category)) {
+    if (visibleCategories.some((category) => category.id === form.category)) {
       return;
     }
 
     setForm((current) => ({
       ...current,
-      category: visibleCategories[0] ?? "other",
+      category: visibleCategories[0]?.id ?? "other",
     }));
   }, [form.category, visibleCategories]);
 
@@ -182,26 +214,30 @@ export function ExerciseLibrary({
     setIsFormOpen(true);
   };
 
-  const categoryNameExists = (name: string, ignoredCategory?: string) => {
+  const categoryNameExists = (name: string, ignoredCategoryId?: string) => {
     const normalizedName = normalizedCategoryKey(name);
 
     return visibleCategories.some((category) => {
-      if (category === ignoredCategory) {
+      if (category.id === ignoredCategoryId) {
         return false;
       }
 
-      return (
-        normalizedCategoryKey(category) === normalizedName ||
-        normalizedCategoryKey(categoryLabel(category, t)) === normalizedName
-      );
+      const labelsToCheck = [
+        category.id,
+        category.labels.en ?? "",
+        category.labels.fr ?? "",
+        categoryLabel(category, language, t),
+      ];
+
+      return labelsToCheck.some((label) => normalizedCategoryKey(label) === normalizedName);
     });
   };
 
   const saveCategoryChanges = async (
-    nextCategories: string[],
+    nextCategories: ExerciseCategoryDefinition[],
     nextExercises = exercises,
   ): Promise<boolean> => {
-    const normalizedCategories = normalizeExerciseCategories(nextCategories);
+    const normalizedCategories = normalizeExerciseCategoryDefinitions(nextCategories, language);
 
     setCategoryError(null);
     setCategoryMessage(null);
@@ -215,7 +251,10 @@ export function ExerciseLibrary({
       await onSaveCategories(normalizedCategories);
       setCategoryDrafts(
         Object.fromEntries(
-          normalizedCategories.map((category) => [category, categoryLabel(category, t)]),
+          normalizedCategories.map((category) => [
+            category.id,
+            categoryLabel(category, language, t),
+          ]),
         ),
       );
       setCategoryMessage(t("exercises.categorySaved"));
@@ -241,49 +280,51 @@ export function ExerciseLibrary({
       return;
     }
 
-    if (await saveCategoryChanges([...visibleCategories, categoryName])) {
+    const nextCategory = createExerciseCategoryDefinition(categoryName, language);
+
+    if (await saveCategoryChanges([...visibleCategories, nextCategory])) {
       setCategoryToAdd("");
-      setForm((current) => ({ ...current, category: categoryName }));
+      setForm((current) => ({ ...current, category: nextCategory.id }));
     }
   };
 
-  const renameCategory = async (category: string) => {
-    const nextCategoryName = normalizeCategoryInput(categoryDrafts[category] ?? "");
+  const renameCategory = async (category: ExerciseCategoryDefinition) => {
+    const nextCategoryName = normalizeCategoryInput(categoryDrafts[category.id] ?? "");
 
     if (!nextCategoryName) {
       setCategoryError(t("exercises.categoryErrorName"));
       return;
     }
 
-    if (normalizedCategoryKey(nextCategoryName) === normalizedCategoryKey(categoryLabel(category, t))) {
+    if (
+      normalizedCategoryKey(nextCategoryName) ===
+      normalizedCategoryKey(categoryLabel(category, language, t))
+    ) {
       setCategoryDrafts((current) => ({
         ...current,
-        [category]: categoryLabel(category, t),
+        [category.id]: categoryLabel(category, language, t),
       }));
       return;
     }
 
-    if (categoryNameExists(nextCategoryName, category)) {
+    if (categoryNameExists(nextCategoryName, category.id)) {
       setCategoryError(t("exercises.categoryErrorDuplicate"));
       return;
     }
 
-    const now = new Date().toISOString();
     const nextCategories = visibleCategories.map((item) =>
-      item === category ? nextCategoryName : item,
-    );
-    const nextExercises = exercises.map((exercise) =>
-      exercise.category === category
-        ? { ...exercise, category: nextCategoryName, updatedAt: now }
-        : exercise,
+      item.id === category.id
+        ? {
+            ...item,
+            labels: {
+              ...item.labels,
+              [language]: nextCategoryName,
+            },
+          }
+        : item,
     );
 
-    if (await saveCategoryChanges(nextCategories, nextExercises)) {
-      setForm((current) => ({
-        ...current,
-        category: current.category === category ? nextCategoryName : current.category,
-      }));
-    }
+    await saveCategoryChanges(nextCategories);
   };
 
   const requestDeleteCategory = (category: string) => {
@@ -292,14 +333,15 @@ export function ExerciseLibrary({
       return;
     }
 
-    const replacementCategory = visibleCategories.find((item) => item !== category) ?? "";
+    const replacementCategory =
+      visibleCategories.find((item) => item.id !== category)?.id ?? "";
     const usageCount = exercises.filter((exercise) => exercise.category === category).length;
 
     setCategoryError(null);
     setCategoryMessage(null);
 
     if (usageCount === 0) {
-      void saveCategoryChanges(visibleCategories.filter((item) => item !== category));
+      void saveCategoryChanges(visibleCategories.filter((item) => item.id !== category));
       return;
     }
 
@@ -312,7 +354,9 @@ export function ExerciseLibrary({
     }
 
     const now = new Date().toISOString();
-    const nextCategories = visibleCategories.filter((category) => category !== deleteRequest.category);
+    const nextCategories = visibleCategories.filter(
+      (category) => category.id !== deleteRequest.category,
+    );
     const nextExercises = exercises.map((exercise) =>
       exercise.category === deleteRequest.category
         ? { ...exercise, category: deleteRequest.replacementCategory, updatedAt: now }
@@ -475,8 +519,8 @@ export function ExerciseLibrary({
           }
         >
           {visibleCategories.map((category) => (
-            <option key={category} value={category}>
-              {categoryLabel(category, t)}
+            <option key={category.id} value={category.id}>
+              {categoryLabel(category, language, t)}
             </option>
           ))}
         </select>
@@ -694,7 +738,7 @@ export function ExerciseLibrary({
               <div className="mt-4 rounded-md border border-amber-300/50 bg-amber-300/10 p-3">
                 <p className="font-semibold text-amber-100">
                   {t("exercises.categoryDeleteTitle", {
-                    category: categoryLabel(deleteRequest.category, t),
+                    category: getCategoryLabel(deleteRequest.category),
                   })}
                 </p>
                 <p className="mt-1 text-sm text-slate-300">
@@ -717,10 +761,10 @@ export function ExerciseLibrary({
                       }
                     >
                       {visibleCategories
-                        .filter((category) => category !== deleteRequest.category)
+                        .filter((category) => category.id !== deleteRequest.category)
                         .map((category) => (
-                          <option key={category} value={category}>
-                            {categoryLabel(category, t)}
+                          <option key={category.id} value={category.id}>
+                            {categoryLabel(category, language, t)}
                           </option>
                         ))}
                     </select>
@@ -750,12 +794,12 @@ export function ExerciseLibrary({
             <div className="mt-4 space-y-2">
               {visibleCategories.map((category) => {
                 const usageCount = exercises.filter(
-                  (exercise) => exercise.category === category,
+                  (exercise) => exercise.category === category.id,
                 ).length;
 
                 return (
                   <div
-                    key={category}
+                    key={category.id}
                     className="grid gap-2 rounded-md border border-slate-800 bg-slate-950/70 p-3 lg:grid-cols-[minmax(0,1fr)_7rem_auto] lg:items-end"
                   >
                     <label className="space-y-2">
@@ -764,11 +808,11 @@ export function ExerciseLibrary({
                       </span>
                       <input
                         className="field"
-                        value={categoryDrafts[category] ?? categoryLabel(category, t)}
+                        value={categoryDrafts[category.id] ?? categoryLabel(category, language, t)}
                         onChange={(event) => {
                           setCategoryDrafts((current) => ({
                             ...current,
-                            [category]: event.target.value,
+                            [category.id]: event.target.value,
                           }));
                           setCategoryError(null);
                           setCategoryMessage(null);
@@ -790,7 +834,7 @@ export function ExerciseLibrary({
                       type="button"
                       className="danger-button"
                       disabled={isSavingCategories}
-                      onClick={() => requestDeleteCategory(category)}
+                      onClick={() => requestDeleteCategory(category.id)}
                     >
                       <Trash2 aria-hidden="true" size={17} />
                       {t("common.delete")}
@@ -823,7 +867,7 @@ export function ExerciseLibrary({
                     {translateExerciseName(exercise, language)}
                   </h3>
                   <p className="text-sm text-slate-400">
-                    {categoryLabel(exercise.category, t)} -{" "}
+                    {getCategoryLabel(exercise.category)} -{" "}
                     {modeLabel(exercise.defaultMode, {
                       time: t("common.time"),
                       reps: t("common.reps"),

@@ -308,18 +308,78 @@ function applyExerciseDefaultTargets(exercises) {
   });
 }
 
-function normalizeExerciseCategories(categories) {
+function normalizeCategoryInput(value) {
+  return String(value).trim().replace(/\s+/g, " ");
+}
+
+function isDefaultExerciseCategory(categoryId) {
+  return defaultSettings.exerciseCategories.some((category) => category.id === categoryId);
+}
+
+function cloneExerciseCategory(category) {
+  return {
+    id: category.id,
+    labels: { ...(category.labels ?? {}) },
+  };
+}
+
+function normalizeExerciseCategories(categories, fallbackLanguage = "fr") {
   const normalizedCategories = (Array.isArray(categories) ? categories : [])
-    .map((category) => String(category).trim())
+    .map((category) => {
+      if (typeof category === "string") {
+        const id = normalizeCategoryInput(category);
+
+        if (!id) {
+          return null;
+        }
+
+        return {
+          id,
+          labels: isDefaultExerciseCategory(id) ? {} : { [fallbackLanguage]: id },
+        };
+      }
+
+      if (!category || typeof category !== "object" || Array.isArray(category)) {
+        return null;
+      }
+
+      const id =
+        typeof category.id === "string" ? normalizeCategoryInput(category.id) : "";
+
+      if (!id) {
+        return null;
+      }
+
+      const rawLabels =
+        category.labels && typeof category.labels === "object" && !Array.isArray(category.labels)
+          ? category.labels
+          : {};
+      const labels = {};
+
+      ["en", "fr"].forEach((language) => {
+        const label =
+          typeof rawLabels[language] === "string"
+            ? normalizeCategoryInput(rawLabels[language])
+            : "";
+
+        if (label) {
+          labels[language] = label;
+        }
+      });
+
+      return { id, labels };
+    })
     .filter(Boolean)
     .filter((category, index, allCategories) => {
-      const normalizedCategory = category.toLowerCase();
-      return allCategories.findIndex((item) => item.toLowerCase() === normalizedCategory) === index;
+      const normalizedCategory = category.id.toLowerCase();
+      return (
+        allCategories.findIndex((item) => item.id.toLowerCase() === normalizedCategory) === index
+      );
     });
 
   return normalizedCategories.length > 0
     ? normalizedCategories
-    : [...defaultSettings.exerciseCategories];
+    : defaultSettings.exerciseCategories.map(cloneExerciseCategory);
 }
 
 function readSettings() {
@@ -338,10 +398,14 @@ function readSettings() {
     savedSettings.voiceLanguage === "fr"
       ? savedSettings.voiceLanguage
       : defaultSettings.voiceLanguage;
+  const language =
+    savedSettings.language === "en" || savedSettings.language === "fr"
+      ? savedSettings.language
+      : defaultSettings.language;
   const savedExerciseDefaultsVersion = Number.isFinite(savedSettings.exerciseDefaultsVersion)
     ? Math.max(0, Math.round(Number(savedSettings.exerciseDefaultsVersion)))
     : 0;
-  const exerciseCategories = normalizeExerciseCategories(savedSettings.exerciseCategories);
+  const exerciseCategories = normalizeExerciseCategories(savedSettings.exerciseCategories, language);
 
   return {
     ...defaultSettings,
@@ -350,6 +414,7 @@ function readSettings() {
     voiceProvider,
     voiceLanguage,
     voiceEnabled: notificationMode === "voice",
+    language,
     exerciseDefaultsVersion: savedExerciseDefaultsVersion,
     exerciseCategories,
   };
@@ -373,10 +438,14 @@ function writeSettings(settings) {
     settings.voiceLanguage === "fr"
       ? settings.voiceLanguage
       : defaultSettings.voiceLanguage;
+  const language =
+    settings.language === "en" || settings.language === "fr"
+      ? settings.language
+      : defaultSettings.language;
   const nextExerciseDefaultsVersion = Number.isFinite(settings.exerciseDefaultsVersion)
     ? Math.max(0, Math.round(Number(settings.exerciseDefaultsVersion)))
     : defaultSettings.exerciseDefaultsVersion;
-  const exerciseCategories = normalizeExerciseCategories(settings.exerciseCategories);
+  const exerciseCategories = normalizeExerciseCategories(settings.exerciseCategories, language);
 
   db.prepare(
     `INSERT INTO settings (id, data, updated_at)
@@ -389,6 +458,7 @@ function writeSettings(settings) {
     voiceProvider,
     voiceLanguage,
     voiceEnabled: notificationMode === "voice",
+    language,
     exerciseDefaultsVersion: nextExerciseDefaultsVersion,
     exerciseCategories,
   }), new Date().toISOString());

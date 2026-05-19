@@ -1,5 +1,8 @@
 import type { Language } from "../i18n/translations";
-import { exerciseCategories } from "./exercise";
+import {
+  defaultExerciseCategoryDefinitions,
+  type ExerciseCategoryDefinition,
+} from "./exercise";
 
 export type NotificationMode = "voice" | "beep" | "off";
 export type VoiceProvider = "piper" | "browser";
@@ -16,7 +19,7 @@ export type AppSettings = {
   voiceVolume: number;
   language: Language;
   exerciseDefaultsVersion: number;
-  exerciseCategories: string[];
+  exerciseCategories: ExerciseCategoryDefinition[];
 };
 
 export const defaultSettings: AppSettings = {
@@ -29,5 +32,8 @@ export const defaultSettings: AppSettings = {
   voiceVolume: 1,
   language: "fr",
   exerciseDefaultsVersion: 1,
-  exerciseCategories: [...exerciseCategories],
+  exerciseCategories: defaultExerciseCategoryDefinitions.map((category) => ({
+    ...category,
+    labels: { ...category.labels },
+  })),
 };

@@ -308,6 +308,20 @@ function applyExerciseDefaultTargets(exercises) {
   });
 }
 
+function normalizeExerciseCategories(categories) {
+  const normalizedCategories = (Array.isArray(categories) ? categories : [])
+    .map((category) => String(category).trim())
+    .filter(Boolean)
+    .filter((category, index, allCategories) => {
+      const normalizedCategory = category.toLowerCase();
+      return allCategories.findIndex((item) => item.toLowerCase() === normalizedCategory) === index;
+    });
+
+  return normalizedCategories.length > 0
+    ? normalizedCategories
+    : [...defaultSettings.exerciseCategories];
+}
+
 function readSettings() {
   const row = db.prepare("SELECT data FROM settings WHERE id = 1").get();
   const savedSettings = row ? JSON.parse(row.data) : {};
@@ -327,6 +341,7 @@ function readSettings() {
   const savedExerciseDefaultsVersion = Number.isFinite(savedSettings.exerciseDefaultsVersion)
     ? Math.max(0, Math.round(Number(savedSettings.exerciseDefaultsVersion)))
     : 0;
+  const exerciseCategories = normalizeExerciseCategories(savedSettings.exerciseCategories);
 
   return {
     ...defaultSettings,
@@ -336,6 +351,7 @@ function readSettings() {
     voiceLanguage,
     voiceEnabled: notificationMode === "voice",
     exerciseDefaultsVersion: savedExerciseDefaultsVersion,
+    exerciseCategories,
   };
 }
 
@@ -360,6 +376,7 @@ function writeSettings(settings) {
   const nextExerciseDefaultsVersion = Number.isFinite(settings.exerciseDefaultsVersion)
     ? Math.max(0, Math.round(Number(settings.exerciseDefaultsVersion)))
     : defaultSettings.exerciseDefaultsVersion;
+  const exerciseCategories = normalizeExerciseCategories(settings.exerciseCategories);
 
   db.prepare(
     `INSERT INTO settings (id, data, updated_at)
@@ -373,6 +390,7 @@ function writeSettings(settings) {
     voiceLanguage,
     voiceEnabled: notificationMode === "voice",
     exerciseDefaultsVersion: nextExerciseDefaultsVersion,
+    exerciseCategories,
   }), new Date().toISOString());
 }
 

@@ -1,5 +1,5 @@
 import { defaultExercises } from "./defaultExercises";
-import type { Exercise } from "../models/exercise";
+import { normalizeExerciseCategories, type Exercise } from "../models/exercise";
 import { defaultProfile, type CharacterProfile } from "../models/profile";
 import {
   defaultSettings,
@@ -234,6 +234,7 @@ function normalizeSettings(settings?: Partial<AppSettings>): AppSettings {
   const exerciseDefaultsVersion = Number.isFinite(settings?.exerciseDefaultsVersion)
     ? Math.max(0, Math.round(Number(settings?.exerciseDefaultsVersion)))
     : defaultSettings.exerciseDefaultsVersion;
+  const exerciseCategories = normalizeExerciseCategories(settings?.exerciseCategories);
 
   return {
     ...defaultSettings,
@@ -243,6 +244,7 @@ function normalizeSettings(settings?: Partial<AppSettings>): AppSettings {
     voiceLanguage,
     voiceEnabled: notificationMode === "voice",
     exerciseDefaultsVersion,
+    exerciseCategories,
   };
 }
 

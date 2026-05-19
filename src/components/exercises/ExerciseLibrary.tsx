@@ -1,18 +1,23 @@
-import { Edit3, Plus, Save, Search, Trash2, X } from "lucide-react";
+import { Edit3, Plus, Save, Search, Tags, Trash2, X } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../../i18n/I18nContext";
+import type { TranslationKey } from "../../i18n/translations";
 import { translateExerciseName } from "../../i18n/exerciseNames";
 import {
-  exerciseCategories,
   type Exercise,
   type ExerciseCategory,
   type ExerciseMode,
+  isDefaultExerciseCategory,
+  normalizeExerciseCategories,
 } from "../../models/exercise";
 import { createId } from "../../utils/id";
 
 type ExerciseLibraryProps = {
+  categories: string[];
   exercises: Exercise[];
   onSaveExercise: (exercise: Exercise) => Promise<void>;
+  onSaveExercises: (exercises: Exercise[]) => Promise<void>;
+  onSaveCategories: (categories: string[]) => Promise<void>;
   onDeleteExercise: (exerciseId: string) => Promise<void>;
 };
 
@@ -29,6 +34,11 @@ type ExerciseFormState = {
 };
 
 type FormPlacement = "add-popover" | "edit-dialog";
+
+type CategoryDeleteRequest = {
+  category: string;
+  replacementCategory: string;
+};
 
 const emptyForm: ExerciseFormState = {
   name: "",
@@ -62,19 +72,52 @@ function modeLabel(mode: ExerciseMode, labels: { time: string; reps: string; dis
   return mode === "distance" ? labels.distance : labels.reps;
 }
 
+function normalizeCategoryInput(value: string): string {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function normalizedCategoryKey(value: string): string {
+  return normalizeCategoryInput(value).toLowerCase();
+}
+
+function categoryLabel(category: string, t: ReturnType<typeof useI18n>["t"]): string {
+  if (isDefaultExerciseCategory(category)) {
+    return t(`category.${category}` as TranslationKey);
+  }
+
+  return category;
+}
+
 export function ExerciseLibrary({
+  categories,
   exercises,
   onDeleteExercise,
+  onSaveCategories,
   onSaveExercise,
+  onSaveExercises,
 }: ExerciseLibraryProps) {
   const { language, t } = useI18n();
   const [query, setQuery] = useState("");
   const [form, setForm] = useState<ExerciseFormState>(emptyForm);
   const [error, setError] = useState<string | null>(null);
+  const [categoryError, setCategoryError] = useState<string | null>(null);
+  const [categoryMessage, setCategoryMessage] = useState<string | null>(null);
+  const [categoryDrafts, setCategoryDrafts] = useState<Record<string, string>>({});
+  const [categoryToAdd, setCategoryToAdd] = useState("");
+  const [deleteRequest, setDeleteRequest] = useState<CategoryDeleteRequest | null>(null);
   const [formPlacement, setFormPlacement] = useState<FormPlacement>("add-popover");
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingCategories, setIsSavingCategories] = useState(false);
   const formPopoverRef = useRef<HTMLDivElement>(null);
+
+  const visibleCategories = useMemo(() => {
+    return normalizeExerciseCategories([
+      ...categories,
+      ...exercises.map((exercise) => exercise.category),
+    ]);
+  }, [categories, exercises]);
 
   const filteredExercises = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -85,15 +128,36 @@ export function ExerciseLibrary({
 
     return exercises.filter((exercise) => {
       const translatedName = translateExerciseName(exercise, language).toLowerCase();
+      const translatedCategory = categoryLabel(exercise.category, t).toLowerCase();
 
       return (
         exercise.name.toLowerCase().includes(normalizedQuery) ||
         translatedName.includes(normalizedQuery) ||
         exercise.category.toLowerCase().includes(normalizedQuery) ||
+        translatedCategory.includes(normalizedQuery) ||
         exercise.defaultMode.includes(normalizedQuery)
       );
     });
-  }, [exercises, language, query]);
+  }, [exercises, language, query, t]);
+
+  useEffect(() => {
+    setCategoryDrafts(
+      Object.fromEntries(
+        visibleCategories.map((category) => [category, categoryLabel(category, t)]),
+      ),
+    );
+  }, [t, visibleCategories]);
+
+  useEffect(() => {
+    if (visibleCategories.includes(form.category)) {
+      return;
+    }
+
+    setForm((current) => ({
+      ...current,
+      category: visibleCategories[0] ?? "other",
+    }));
+  }, [form.category, visibleCategories]);
 
   const resetForm = () => {
     setForm(emptyForm);
@@ -116,6 +180,155 @@ export function ExerciseLibrary({
     setError(null);
     setFormPlacement("edit-dialog");
     setIsFormOpen(true);
+  };
+
+  const categoryNameExists = (name: string, ignoredCategory?: string) => {
+    const normalizedName = normalizedCategoryKey(name);
+
+    return visibleCategories.some((category) => {
+      if (category === ignoredCategory) {
+        return false;
+      }
+
+      return (
+        normalizedCategoryKey(category) === normalizedName ||
+        normalizedCategoryKey(categoryLabel(category, t)) === normalizedName
+      );
+    });
+  };
+
+  const saveCategoryChanges = async (
+    nextCategories: string[],
+    nextExercises = exercises,
+  ): Promise<boolean> => {
+    const normalizedCategories = normalizeExerciseCategories(nextCategories);
+
+    setCategoryError(null);
+    setCategoryMessage(null);
+    setIsSavingCategories(true);
+
+    try {
+      if (nextExercises !== exercises) {
+        await onSaveExercises(nextExercises);
+      }
+
+      await onSaveCategories(normalizedCategories);
+      setCategoryDrafts(
+        Object.fromEntries(
+          normalizedCategories.map((category) => [category, categoryLabel(category, t)]),
+        ),
+      );
+      setCategoryMessage(t("exercises.categorySaved"));
+      return true;
+    } catch {
+      setCategoryError(t("exercises.categorySaveError"));
+      return false;
+    } finally {
+      setIsSavingCategories(false);
+    }
+  };
+
+  const addCategory = async () => {
+    const categoryName = normalizeCategoryInput(categoryToAdd);
+
+    if (!categoryName) {
+      setCategoryError(t("exercises.categoryErrorName"));
+      return;
+    }
+
+    if (categoryNameExists(categoryName)) {
+      setCategoryError(t("exercises.categoryErrorDuplicate"));
+      return;
+    }
+
+    if (await saveCategoryChanges([...visibleCategories, categoryName])) {
+      setCategoryToAdd("");
+      setForm((current) => ({ ...current, category: categoryName }));
+    }
+  };
+
+  const renameCategory = async (category: string) => {
+    const nextCategoryName = normalizeCategoryInput(categoryDrafts[category] ?? "");
+
+    if (!nextCategoryName) {
+      setCategoryError(t("exercises.categoryErrorName"));
+      return;
+    }
+
+    if (normalizedCategoryKey(nextCategoryName) === normalizedCategoryKey(categoryLabel(category, t))) {
+      setCategoryDrafts((current) => ({
+        ...current,
+        [category]: categoryLabel(category, t),
+      }));
+      return;
+    }
+
+    if (categoryNameExists(nextCategoryName, category)) {
+      setCategoryError(t("exercises.categoryErrorDuplicate"));
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const nextCategories = visibleCategories.map((item) =>
+      item === category ? nextCategoryName : item,
+    );
+    const nextExercises = exercises.map((exercise) =>
+      exercise.category === category
+        ? { ...exercise, category: nextCategoryName, updatedAt: now }
+        : exercise,
+    );
+
+    if (await saveCategoryChanges(nextCategories, nextExercises)) {
+      setForm((current) => ({
+        ...current,
+        category: current.category === category ? nextCategoryName : current.category,
+      }));
+    }
+  };
+
+  const requestDeleteCategory = (category: string) => {
+    if (visibleCategories.length <= 1) {
+      setCategoryError(t("exercises.categoryErrorLast"));
+      return;
+    }
+
+    const replacementCategory = visibleCategories.find((item) => item !== category) ?? "";
+    const usageCount = exercises.filter((exercise) => exercise.category === category).length;
+
+    setCategoryError(null);
+    setCategoryMessage(null);
+
+    if (usageCount === 0) {
+      void saveCategoryChanges(visibleCategories.filter((item) => item !== category));
+      return;
+    }
+
+    setDeleteRequest({ category, replacementCategory });
+  };
+
+  const confirmDeleteCategory = async () => {
+    if (!deleteRequest || !deleteRequest.replacementCategory) {
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const nextCategories = visibleCategories.filter((category) => category !== deleteRequest.category);
+    const nextExercises = exercises.map((exercise) =>
+      exercise.category === deleteRequest.category
+        ? { ...exercise, category: deleteRequest.replacementCategory, updatedAt: now }
+        : exercise,
+    );
+
+    if (await saveCategoryChanges(nextCategories, nextExercises)) {
+      setForm((current) => ({
+        ...current,
+        category:
+          current.category === deleteRequest.category
+            ? deleteRequest.replacementCategory
+            : current.category,
+      }));
+      setDeleteRequest(null);
+    }
   };
 
   useEffect(() => {
@@ -204,10 +417,15 @@ export function ExerciseLibrary({
       updatedAt: now,
     };
 
-    await onSaveExercise(exercise);
-    setIsSaving(false);
-    resetForm();
-    setIsFormOpen(false);
+    try {
+      await onSaveExercise(exercise);
+      resetForm();
+      setIsFormOpen(false);
+    } catch {
+      setError(t("exercises.errorSave"));
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const exerciseForm = (
@@ -234,8 +452,18 @@ export function ExerciseLibrary({
         />
       </label>
 
-      <label className="block space-y-2">
-        <span className="label">{t("exercises.category")}</span>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-3">
+          <span className="label">{t("exercises.category")}</span>
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wide text-cyan-200 hover:text-cyan-100"
+            onClick={() => setIsCategoryManagerOpen(true)}
+          >
+            <Tags aria-hidden="true" size={14} />
+            {t("exercises.manageCategories")}
+          </button>
+        </div>
         <select
           className="field"
           value={form.category}
@@ -246,13 +474,13 @@ export function ExerciseLibrary({
             }))
           }
         >
-          {exerciseCategories.map((category) => (
+          {visibleCategories.map((category) => (
             <option key={category} value={category}>
-              {t(`category.${category}`)}
+              {categoryLabel(category, t)}
             </option>
           ))}
         </select>
-      </label>
+      </div>
 
       <fieldset className="space-y-2">
         <legend className="label">{t("exercises.defaultMode")}</legend>
@@ -373,6 +601,14 @@ export function ExerciseLibrary({
               type="search"
             />
           </label>
+          <button
+            type="button"
+            className="secondary-button w-full sm:w-auto"
+            onClick={() => setIsCategoryManagerOpen(true)}
+          >
+            <Tags aria-hidden="true" size={17} />
+            {t("exercises.manageCategories")}
+          </button>
           <div ref={formPopoverRef} className="relative">
             <button type="button" className="primary-button w-full sm:w-auto" onClick={openAddForm}>
               <Plus aria-hidden="true" size={17} />
@@ -396,6 +632,188 @@ export function ExerciseLibrary({
         </div>
       ) : null}
 
+      {isCategoryManagerOpen ? (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/70 px-4 py-8 backdrop-blur-sm">
+          <div className="w-full max-w-2xl rounded-lg border border-slate-700 bg-slate-900 p-4 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="label">{t("exercises.categories")}</p>
+                <h3 className="text-xl font-bold text-slate-50">
+                  {t("exercises.categoryManagerTitle")}
+                </h3>
+                <p className="mt-1 text-sm text-slate-400">
+                  {t("exercises.categoryManagerDescription")}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="secondary-button px-3"
+                aria-label={t("common.cancel")}
+                onClick={() => {
+                  setIsCategoryManagerOpen(false);
+                  setDeleteRequest(null);
+                  setCategoryError(null);
+                  setCategoryMessage(null);
+                }}
+              >
+                <X aria-hidden="true" size={16} />
+              </button>
+            </div>
+
+            <form
+              className="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void addCategory();
+              }}
+            >
+              <label className="space-y-2">
+                <span className="label">{t("exercises.newCategory")}</span>
+                <input
+                  className="field"
+                  value={categoryToAdd}
+                  onChange={(event) => {
+                    setCategoryToAdd(event.target.value);
+                    setCategoryError(null);
+                    setCategoryMessage(null);
+                  }}
+                  placeholder={t("exercises.categoryNamePlaceholder")}
+                />
+              </label>
+              <button
+                type="submit"
+                className="primary-button self-end"
+                disabled={isSavingCategories}
+              >
+                <Plus aria-hidden="true" size={17} />
+                {t("exercises.addCategory")}
+              </button>
+            </form>
+
+            {deleteRequest ? (
+              <div className="mt-4 rounded-md border border-amber-300/50 bg-amber-300/10 p-3">
+                <p className="font-semibold text-amber-100">
+                  {t("exercises.categoryDeleteTitle", {
+                    category: categoryLabel(deleteRequest.category, t),
+                  })}
+                </p>
+                <p className="mt-1 text-sm text-slate-300">
+                  {t("exercises.categoryDeleteDescription", {
+                    count: exercises.filter((exercise) => exercise.category === deleteRequest.category).length,
+                  })}
+                </p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-end">
+                  <label className="space-y-2">
+                    <span className="label">{t("exercises.moveExercisesTo")}</span>
+                    <select
+                      className="field"
+                      value={deleteRequest.replacementCategory}
+                      onChange={(event) =>
+                        setDeleteRequest((current) =>
+                          current
+                            ? { ...current, replacementCategory: event.target.value }
+                            : current,
+                        )
+                      }
+                    >
+                      {visibleCategories
+                        .filter((category) => category !== deleteRequest.category)
+                        .map((category) => (
+                          <option key={category} value={category}>
+                            {categoryLabel(category, t)}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    className="danger-button"
+                    disabled={isSavingCategories}
+                    onClick={() => {
+                      void confirmDeleteCategory();
+                    }}
+                  >
+                    <Trash2 aria-hidden="true" size={17} />
+                    {t("common.delete")}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => setDeleteRequest(null)}
+                  >
+                    {t("common.cancel")}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="mt-4 space-y-2">
+              {visibleCategories.map((category) => {
+                const usageCount = exercises.filter(
+                  (exercise) => exercise.category === category,
+                ).length;
+
+                return (
+                  <div
+                    key={category}
+                    className="grid gap-2 rounded-md border border-slate-800 bg-slate-950/70 p-3 lg:grid-cols-[minmax(0,1fr)_7rem_auto] lg:items-end"
+                  >
+                    <label className="space-y-2">
+                      <span className="label">
+                        {t("exercises.categoryUsage", { count: usageCount })}
+                      </span>
+                      <input
+                        className="field"
+                        value={categoryDrafts[category] ?? categoryLabel(category, t)}
+                        onChange={(event) => {
+                          setCategoryDrafts((current) => ({
+                            ...current,
+                            [category]: event.target.value,
+                          }));
+                          setCategoryError(null);
+                          setCategoryMessage(null);
+                        }}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      disabled={isSavingCategories}
+                      onClick={() => {
+                        void renameCategory(category);
+                      }}
+                    >
+                      <Save aria-hidden="true" size={17} />
+                      {t("common.save")}
+                    </button>
+                    <button
+                      type="button"
+                      className="danger-button"
+                      disabled={isSavingCategories}
+                      onClick={() => requestDeleteCategory(category)}
+                    >
+                      <Trash2 aria-hidden="true" size={17} />
+                      {t("common.delete")}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            {categoryError ? (
+              <div className="mt-4 rounded-md border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
+                {categoryError}
+              </div>
+            ) : null}
+            {categoryMessage ? (
+              <div className="mt-4 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100">
+                {categoryMessage}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {filteredExercises.map((exercise) => (
             <article key={exercise.id} className="panel flex flex-col gap-4 p-4">
@@ -405,7 +823,7 @@ export function ExerciseLibrary({
                     {translateExerciseName(exercise, language)}
                   </h3>
                   <p className="text-sm text-slate-400">
-                    {t(`category.${exercise.category}`)} -{" "}
+                    {categoryLabel(exercise.category, t)} -{" "}
                     {modeLabel(exercise.defaultMode, {
                       time: t("common.time"),
                       reps: t("common.reps"),

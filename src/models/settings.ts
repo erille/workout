@@ -1,4 +1,5 @@
 import type { Language } from "../i18n/translations";
+import { exerciseCategories } from "./exercise";
 
 export type NotificationMode = "voice" | "beep" | "off";
 export type VoiceProvider = "piper" | "browser";
@@ -15,6 +16,7 @@ export type AppSettings = {
   voiceVolume: number;
   language: Language;
   exerciseDefaultsVersion: number;
+  exerciseCategories: string[];
 };
 
 export const defaultSettings: AppSettings = {
@@ -27,4 +29,5 @@ export const defaultSettings: AppSettings = {
   voiceVolume: 1,
   language: "fr",
   exerciseDefaultsVersion: 1,
+  exerciseCategories: [...exerciseCategories],
 };

@@ -30,7 +30,7 @@ export default function App() {
       ? "local"
       : "server";
   const canLoadData = !authLoading;
-  const { exercises, isLoading: exercisesLoading, saveExercise, deleteExercise } =
+  const { exercises, isLoading: exercisesLoading, saveAllExercises, saveExercise, deleteExercise } =
     useExercises(storageMode, canLoadData);
   const { plans, isLoading: plansLoading, savePlan, deletePlan } = useWorkoutPlans(
     storageMode,
@@ -94,6 +94,13 @@ export default function App() {
     });
   };
 
+  const updateExerciseCategories = async (exerciseCategories: string[]) => {
+    await updateSettings({
+      ...settings,
+      exerciseCategories,
+    });
+  };
+
   const handleLogin = async (password: string) => {
     await login(password);
     setIsLoginOpen(false);
@@ -132,9 +139,12 @@ export default function App() {
               )}
               {currentPage === "exercises" && (
                 <ExerciseLibrary
+                  categories={settings.exerciseCategories}
                   exercises={exercises}
                   onDeleteExercise={deleteExercise}
+                  onSaveCategories={updateExerciseCategories}
                   onSaveExercise={saveExercise}
+                  onSaveExercises={saveAllExercises}
                 />
               )}
               {currentPage === "builder" && (

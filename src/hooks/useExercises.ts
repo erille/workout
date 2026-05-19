@@ -75,10 +75,18 @@ export function useExercises(mode: StorageMode, enabled = true) {
     [persistExercises, visibleExercises],
   );
 
+  const saveAllExercises = useCallback(
+    async (nextExercises: Exercise[]) => {
+      await persistExercises(nextExercises);
+    },
+    [persistExercises],
+  );
+
   return {
     exercises: visibleExercises,
     isLoading: enabled && (isLoading || loadedMode !== mode),
     saveExercise,
+    saveAllExercises,
     deleteExercise,
   };
 }

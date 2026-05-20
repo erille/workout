@@ -17,6 +17,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import {
   CalendarPlus,
+  ChevronDown,
   Copy,
   Edit3,
   GripVertical,
@@ -197,6 +198,7 @@ export function WorkoutHistory({
   const [manualDurationMinutes, setManualDurationMinutes] = useState(60);
   const [manualSteps, setManualSteps] = useState<ManualStepForm[]>(() => [createManualStep()]);
   const [selectedPlanId, setSelectedPlanId] = useState("");
+  const [expandedSessionIds, setExpandedSessionIds] = useState<Set<string>>(() => new Set());
   const [manualError, setManualError] = useState<string | null>(null);
   const [manualMessage, setManualMessage] = useState<string | null>(null);
   const [isSavingManual, setIsSavingManual] = useState(false);
@@ -264,6 +266,20 @@ export function WorkoutHistory({
     );
     setManualError(null);
     setManualMessage(null);
+  };
+
+  const toggleSessionDetails = (sessionId: string) => {
+    setExpandedSessionIds((current) => {
+      const next = new Set(current);
+
+      if (next.has(sessionId)) {
+        next.delete(sessionId);
+      } else {
+        next.add(sessionId);
+      }
+
+      return next;
+    });
   };
 
   const loadSelectedPlan = () => {
@@ -819,70 +835,100 @@ export function WorkoutHistory({
         </div>
       ) : (
         <div className="space-y-4">
-          {filteredSessions.map((session) => (
-            <article key={session.id} className="panel p-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <p className="label">{formatDateTime(session.startedAt)}</p>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-xl font-bold text-slate-50">{session.workoutName}</h3>
-                    {!session.completed ? (
-                      <span className="rounded-md bg-amber-300 px-2 py-1 text-xs font-bold text-amber-950">
-                        {t("history.partial")}
-                      </span>
-                    ) : null}
-                  </div>
-                  <p className="text-sm text-slate-400">
-                    {t(session.completed ? "history.completedSteps" : "history.partialSteps", {
-                      rounds: session.roundsCompleted,
-                      roundPlural: session.roundsCompleted === 1 ? "" : "s",
-                      steps: session.steps.length,
-                      duration: formatSeconds(getElapsedSeconds(session.startedAt, session.completedAt)),
-                    })}
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    className="secondary-button w-fit"
-                    onClick={() => editSession(session)}
-                  >
-                    <Edit3 aria-hidden="true" size={17} />
-                    {t("common.edit")}
-                  </button>
-                  <button
-                    type="button"
-                    className="danger-button w-fit"
-                    onClick={() => {
-                      if (window.confirm(t("history.deleteConfirm", { name: session.workoutName }))) {
-                        void onDeleteSession(session.id);
-                      }
-                    }}
-                  >
-                    <Trash2 aria-hidden="true" size={17} />
-                    {t("common.delete")}
-                  </button>
-                </div>
-              </div>
+          {filteredSessions.map((session) => {
+            const isExpanded = expandedSessionIds.has(session.id);
+            const detailsId = `history-session-details-${session.id}`;
 
-              <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                {session.steps.map((step) => (
-                  <div
-                    key={step.id}
-                    className="rounded-md border border-slate-800 bg-slate-950/70 p-3"
+            return (
+              <article key={session.id} className="panel p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <button
+                    type="button"
+                    className="group flex min-w-0 flex-1 items-start gap-3 rounded-md p-2 text-left transition hover:bg-slate-950/60 focus:outline-none focus:ring-2 focus:ring-cyan-300"
+                    aria-controls={detailsId}
+                    aria-expanded={isExpanded}
+                    onClick={() => toggleSessionDetails(session.id)}
                   >
-                    <p className="text-xs font-semibold uppercase text-cyan-200">
-                      {t("common.round")} {step.round}
-                    </p>
-                    <p className="font-semibold text-slate-50">
-                      {translateExerciseName(step, language)}
-                    </p>
-                    <p className="text-sm text-slate-400">{stepLabel(step, t("common.reps"))}</p>
+                    <span className="mt-1 rounded-md border border-slate-700 p-1 text-slate-300 transition group-hover:border-cyan-300/70 group-hover:text-cyan-200">
+                      <ChevronDown
+                        aria-hidden="true"
+                        className={`transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                        size={17}
+                      />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="label block">{formatDateTime(session.startedAt)}</span>
+                      <span className="flex flex-wrap items-center gap-2">
+                        <span className="break-words text-xl font-bold text-slate-50">
+                          {session.workoutName}
+                        </span>
+                        {!session.completed ? (
+                          <span className="rounded-md bg-amber-300 px-2 py-1 text-xs font-bold text-amber-950">
+                            {t("history.partial")}
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="block text-sm text-slate-400">
+                        {t(session.completed ? "history.completedSteps" : "history.partialSteps", {
+                          rounds: session.roundsCompleted,
+                          roundPlural: session.roundsCompleted === 1 ? "" : "s",
+                          steps: session.steps.length,
+                          duration: formatSeconds(getElapsedSeconds(session.startedAt, session.completedAt)),
+                        })}
+                      </span>
+                      <span className="mt-1 block text-xs font-semibold uppercase text-cyan-200">
+                        {isExpanded ? t("history.hideDetails") : t("history.showDetails")}
+                      </span>
+                    </span>
+                  </button>
+
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="secondary-button w-fit"
+                      onClick={() => editSession(session)}
+                    >
+                      <Edit3 aria-hidden="true" size={17} />
+                      {t("common.edit")}
+                    </button>
+                    <button
+                      type="button"
+                      className="danger-button w-fit"
+                      onClick={() => {
+                        if (window.confirm(t("history.deleteConfirm", { name: session.workoutName }))) {
+                          void onDeleteSession(session.id);
+                        }
+                      }}
+                    >
+                      <Trash2 aria-hidden="true" size={17} />
+                      {t("common.delete")}
+                    </button>
                   </div>
-                ))}
-              </div>
-            </article>
-          ))}
+                </div>
+
+                {isExpanded ? (
+                  <div id={detailsId} className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                    {session.steps.map((step) => (
+                      <div
+                        key={step.id}
+                        className="rounded-md border border-slate-800 bg-slate-950/70 p-3"
+                      >
+                        <p className="text-xs font-semibold uppercase text-cyan-200">
+                          {t("common.round")} {step.round}
+                        </p>
+                        <p className="font-semibold text-slate-50">
+                          {translateExerciseName(step, language)}
+                        </p>
+                        <p className="text-sm text-slate-400">
+                          {stepLabel(step, t("common.reps"))}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </article>
+            );
+          })}
         </div>
       )}
     </section>

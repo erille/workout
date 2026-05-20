@@ -167,7 +167,7 @@ function buildWeekBuckets(dates: Date[], locale: string, today: Date): PeriodBuc
   const currentWeekStart = startOfWeek(today);
 
   return Array.from({ length: 12 }, (_, index) => {
-    const start = addDays(currentWeekStart, (index - 11) * 7);
+    const start = addDays(currentWeekStart, -index * 7);
     const end = addDays(start, 7);
 
     return {

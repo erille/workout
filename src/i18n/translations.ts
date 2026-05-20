@@ -595,7 +595,7 @@ const fr: Record<keyof typeof en, string> = {
   "timer.restart": "Redémarrer",
   "timer.resume": "Reprendre",
   "timer.done": "Terminé",
-  "timer.nextExercise": "Exercice suivant",
+  "timer.nextExercise": "Suivant",
   "timer.finishHere": "Terminer ici",
   "timer.partialSaved": "Session partielle enregistrée.",
   "timer.stopConfirm": "Arrêter cet entraînement sans enregistrer ? Utilise Terminer ici pour sauvegarder la progression.",

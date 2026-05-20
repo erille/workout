@@ -1,4 +1,4 @@
-import { Check, Pause, Play, RotateCcw, Save, Square, TimerReset } from "lucide-react";
+import { Pause, Play, RotateCcw, Save, SkipForward, Square, TimerReset } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import {
   defaultQuickTimerSettings,
@@ -398,7 +398,7 @@ function WorkoutRunner({
   const {
     completedSession,
     completedStepsCount,
-    completeRepsStep,
+    advanceToNextExercise,
     currentStep,
     currentStepWeight,
     finishPartialWorkout,
@@ -425,6 +425,16 @@ function WorkoutRunner({
     state.phase === "starting" || state.phase === "exercise_time" || state.phase === "break";
   const canFinishPartial =
     saveSession && completedStepsCount > 0 && (isRunning || state.phase === "paused");
+  const canAdvanceToNextExercise =
+    state.phase === "exercise_time" ||
+    state.phase === "exercise_reps" ||
+    state.phase === "exercise_distance" ||
+    state.phase === "break" ||
+    (state.phase === "paused" &&
+      (state.previousPhase === "exercise_time" ||
+        state.previousPhase === "exercise_reps" ||
+        state.previousPhase === "exercise_distance" ||
+        state.previousPhase === "break"));
   const completedStepCount =
     (state.currentRound - 1) * plan.steps.length +
     state.currentStepIndex +
@@ -573,10 +583,10 @@ function WorkoutRunner({
                   {t("timer.resume")}
                 </button>
               ) : null}
-              {state.phase === "exercise_reps" || state.phase === "exercise_distance" ? (
-                <button type="button" className="primary-button min-h-14" onClick={completeRepsStep}>
-                  <Check aria-hidden="true" size={20} />
-                  {t("timer.done")}
+              {canAdvanceToNextExercise ? (
+                <button type="button" className="primary-button min-h-14" onClick={advanceToNextExercise}>
+                  <SkipForward aria-hidden="true" size={20} />
+                  {t("timer.nextExercise")}
                 </button>
               ) : null}
               {canFinishPartial ? (

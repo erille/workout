@@ -548,15 +548,32 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
     }));
   }, []);
 
-  const completeRepsStep = useCallback(() => {
+  const advanceToNextExercise = useCallback(() => {
     const current = stateRef.current;
+    const activePhase = current.phase === "paused" ? current.previousPhase : current.phase;
 
-    if (current.phase !== "exercise_reps" && current.phase !== "exercise_distance") {
+    if (!activePhase) {
       return;
     }
 
-    moveToBreak(current.currentRound, current.currentStepIndex);
-  }, [moveToBreak]);
+    cancelSpeech();
+    cancelAudioCues();
+    targetEndTimeRef.current = null;
+
+    if (
+      activePhase === "exercise_time" ||
+      activePhase === "exercise_reps" ||
+      activePhase === "exercise_distance"
+    ) {
+      recordStepCompletion(current.currentRound, current.currentStepIndex);
+      advanceAfterBreak(current.currentRound, current.currentStepIndex);
+      return;
+    }
+
+    if (activePhase === "break") {
+      advanceAfterBreak(current.currentRound, current.currentStepIndex);
+    }
+  }, [advanceAfterBreak, recordStepCompletion]);
 
   const updateCurrentStepWeight = useCallback((weight: number | undefined) => {
     const current = stateRef.current;
@@ -606,7 +623,7 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
     resumeWorkout,
     stopWorkout,
     finishPartialWorkout,
-    completeRepsStep,
+    advanceToNextExercise,
     updateCurrentStepWeight,
   };
 }

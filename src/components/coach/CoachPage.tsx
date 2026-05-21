@@ -245,15 +245,6 @@ export function CoachPage({ onDataChanged }: CoachPageProps) {
           </div>
         ) : (
           <>
-            <div className="mb-3 flex flex-wrap items-center gap-2 text-xs font-semibold uppercase text-slate-400">
-              <span className="rounded-md border border-slate-800 bg-slate-950/70 px-2 py-1">
-                {status.provider}
-              </span>
-              <span className="rounded-md border border-slate-800 bg-slate-950/70 px-2 py-1">
-                {status.model}
-              </span>
-            </div>
-
             <div
               ref={messagesPanelRef}
               className="themed-scrollbar h-[28rem] space-y-3 overflow-y-auto rounded-md border border-slate-800 bg-slate-950/50 p-3 sm:h-[34rem]"

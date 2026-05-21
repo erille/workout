@@ -612,18 +612,36 @@ function getCoachConfig() {
   };
 }
 
-function readCoachMessages(limit = 80) {
+function readCoachMessagePage(limit = 80, beforeCursor) {
   const resolvedLimit = Math.max(1, Math.min(200, Math.round(Number(limit) || 80)));
-
-  return db
+  const parsedBeforeCursor = Number(beforeCursor);
+  const hasBeforeCursor = Number.isFinite(parsedBeforeCursor) && parsedBeforeCursor > 0;
+  const rows = db
     .prepare(
-      `SELECT id, role, content, created_at AS createdAt, provider, model
-       FROM coach_messages
-       ORDER BY created_at DESC, rowid DESC
-       LIMIT ?`,
+      hasBeforeCursor
+        ? `SELECT rowid AS cursor, id, role, content, created_at AS createdAt, provider, model
+           FROM coach_messages
+           WHERE rowid < ?
+           ORDER BY rowid DESC
+           LIMIT ?`
+        : `SELECT rowid AS cursor, id, role, content, created_at AS createdAt, provider, model
+           FROM coach_messages
+           ORDER BY rowid DESC
+           LIMIT ?`,
     )
-    .all(resolvedLimit)
-    .reverse();
+    .all(...(hasBeforeCursor ? [parsedBeforeCursor, resolvedLimit + 1] : [resolvedLimit + 1]));
+  const hasMore = rows.length > resolvedLimit;
+  const messages = rows.slice(0, resolvedLimit).reverse();
+
+  return {
+    messages,
+    hasMore,
+    nextCursor: messages[0]?.cursor,
+  };
+}
+
+function readCoachMessages(limit = 80) {
+  return readCoachMessagePage(limit).messages;
 }
 
 function writeCoachMessage(role, content, provider, model) {
@@ -1513,13 +1531,15 @@ async function handleCoachApi(request, response, pathname) {
   }
 
   if (request.method === "GET" && pathname === "/api/coach/messages") {
-    jsonResponse(response, 200, { messages: readCoachMessages() });
+    const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
+
+    jsonResponse(response, 200, readCoachMessagePage(80, url.searchParams.get("before")));
     return true;
   }
 
   if (request.method === "POST" && pathname === "/api/coach/clear") {
     clearCoachMessages();
-    jsonResponse(response, 200, { messages: [] });
+    jsonResponse(response, 200, { messages: [], hasMore: false });
     return true;
   }
 
@@ -1560,7 +1580,7 @@ async function handleCoachApi(request, response, pathname) {
 
       jsonResponse(response, 200, {
         message: result.content,
-        messages: readCoachMessages(),
+        ...readCoachMessagePage(),
         dataChanged: result.dataChanged,
         provider: result.provider,
         model: result.model,

@@ -16,11 +16,20 @@ type CoachMessage = {
   createdAt: string;
   provider?: string;
   model?: string;
+  cursor?: number;
+};
+
+type CoachMessagesResponse = {
+  messages: CoachMessage[];
+  hasMore: boolean;
+  nextCursor?: number;
 };
 
 type CoachChatResponse = {
   dataChanged: boolean;
   messages: CoachMessage[];
+  hasMore?: boolean;
+  nextCursor?: number;
 };
 
 type CoachPageProps = {
@@ -52,9 +61,14 @@ export function CoachPage({ onDataChanged }: CoachPageProps) {
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [hasOlderMessages, setHasOlderMessages] = useState(false);
+  const [olderCursor, setOlderCursor] = useState<number | undefined>(undefined);
   const [visibleSince, setVisibleSince] = useState<number | null>(null);
+  const messagesPanelRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const previousScrollHeightRef = useRef<number | null>(null);
 
   const filterVisibleMessages = (nextMessages: CoachMessage[]) =>
     visibleSince === null
@@ -67,7 +81,7 @@ export function CoachPage({ onDataChanged }: CoachPageProps) {
     setIsLoading(true);
     Promise.all([
       apiJson<CoachStatus>("/api/coach/status"),
-      apiJson<{ messages: CoachMessage[] }>("/api/coach/messages"),
+      apiJson<CoachMessagesResponse>("/api/coach/messages"),
     ])
       .then(([loadedStatus, loadedMessages]) => {
         if (!isMounted) {
@@ -75,7 +89,9 @@ export function CoachPage({ onDataChanged }: CoachPageProps) {
         }
 
         setStatus(loadedStatus);
-        setMessages(loadedMessages.messages);
+        setMessages(filterVisibleMessages(loadedMessages.messages));
+        setHasOlderMessages(visibleSince === null ? loadedMessages.hasMore : false);
+        setOlderCursor(visibleSince === null ? loadedMessages.nextCursor : undefined);
       })
       .catch((loadError: unknown) => {
         if (isMounted) {
@@ -94,6 +110,20 @@ export function CoachPage({ onDataChanged }: CoachPageProps) {
   }, [t]);
 
   useEffect(() => {
+    if (previousScrollHeightRef.current !== null) {
+      const previousScrollHeight = previousScrollHeightRef.current;
+      previousScrollHeightRef.current = null;
+
+      window.requestAnimationFrame(() => {
+        const panel = messagesPanelRef.current;
+
+        if (panel) {
+          panel.scrollTop += panel.scrollHeight - previousScrollHeight;
+        }
+      });
+      return;
+    }
+
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages]);
 
@@ -124,6 +154,8 @@ export function CoachPage({ onDataChanged }: CoachPageProps) {
       });
 
       setMessages(filterVisibleMessages(response.messages));
+      setHasOlderMessages(visibleSince === null ? Boolean(response.hasMore) : false);
+      setOlderCursor(visibleSince === null ? response.nextCursor : undefined);
 
       if (response.dataChanged) {
         onDataChanged();
@@ -151,9 +183,37 @@ export function CoachPage({ onDataChanged }: CoachPageProps) {
     event.currentTarget.form?.requestSubmit();
   };
 
+  const loadOlderMessages = async () => {
+    if (!olderCursor || isLoadingOlder || visibleSince !== null) {
+      return;
+    }
+
+    const panel = messagesPanelRef.current;
+    previousScrollHeightRef.current = panel?.scrollHeight ?? null;
+    setIsLoadingOlder(true);
+    setError(null);
+
+    try {
+      const response = await apiJson<CoachMessagesResponse>(
+        `/api/coach/messages?before=${encodeURIComponent(String(olderCursor))}`,
+      );
+
+      setMessages((current) => [...response.messages, ...current]);
+      setHasOlderMessages(response.hasMore);
+      setOlderCursor(response.nextCursor);
+    } catch (loadError) {
+      previousScrollHeightRef.current = null;
+      setError(loadError instanceof Error ? loadError.message : t("coach.errorLoad"));
+    } finally {
+      setIsLoadingOlder(false);
+    }
+  };
+
   const clearMessages = () => {
     setVisibleSince(Date.now());
     setMessages([]);
+    setHasOlderMessages(false);
+    setOlderCursor(undefined);
     setError(null);
   };
 
@@ -194,7 +254,24 @@ export function CoachPage({ onDataChanged }: CoachPageProps) {
               </span>
             </div>
 
-            <div className="themed-scrollbar h-[28rem] space-y-3 overflow-y-auto rounded-md border border-slate-800 bg-slate-950/50 p-3 sm:h-[34rem]">
+            <div
+              ref={messagesPanelRef}
+              className="themed-scrollbar h-[28rem] space-y-3 overflow-y-auto rounded-md border border-slate-800 bg-slate-950/50 p-3 sm:h-[34rem]"
+            >
+              {hasOlderMessages && visibleSince === null ? (
+                <div className="flex justify-center">
+                  <button
+                    type="button"
+                    className="secondary-button px-3 py-1.5 text-xs"
+                    disabled={isLoadingOlder}
+                    onClick={() => {
+                      void loadOlderMessages();
+                    }}
+                  >
+                    {isLoadingOlder ? t("coach.loadingOlder") : t("coach.loadOlder")}
+                  </button>
+                </div>
+              ) : null}
               {messages.length === 0 ? (
                 <div className="flex h-full items-center justify-center text-center text-sm text-slate-400">
                   {t("coach.empty")}

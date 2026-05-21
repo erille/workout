@@ -619,7 +619,7 @@ function readCoachMessages(limit = 80) {
     .prepare(
       `SELECT id, role, content, created_at AS createdAt, provider, model
        FROM coach_messages
-       ORDER BY created_at DESC
+       ORDER BY created_at DESC, rowid DESC
        LIMIT ?`,
     )
     .all(resolvedLimit)

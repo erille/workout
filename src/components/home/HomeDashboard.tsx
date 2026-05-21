@@ -206,8 +206,7 @@ export function HomeDashboard({ profile, sessions }: HomeDashboardProps) {
   return (
     <section className="space-y-6">
       <div className="py-6 text-center sm:py-10">
-        <p className="label">{t("home.section")}</p>
-        <h2 className="mx-auto mt-3 max-w-4xl text-4xl font-black leading-tight text-slate-50 sm:text-5xl">
+        <h2 className="mx-auto max-w-4xl text-4xl font-black leading-tight text-slate-50 sm:text-5xl">
           {motivation}
         </h2>
         <p className="mx-auto mt-4 max-w-xl text-sm font-medium text-slate-400">

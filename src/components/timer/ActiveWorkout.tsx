@@ -477,7 +477,6 @@ function WorkoutRunner({
     <section className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="label">{t("timer.active")}</p>
           <h2 className="text-2xl font-bold text-slate-50">{plan.name}</h2>
           <p className="text-sm text-slate-400">
             {t("timer.roundOf", {
@@ -686,7 +685,6 @@ function TimerHome({
     <section className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="label">{t("nav.timer")}</p>
           <h2 className="text-2xl font-bold text-slate-50">
             {mode === "quick" ? t("timer.quickTimer") : t("timer.choose")}
           </h2>

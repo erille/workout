@@ -258,7 +258,6 @@ export function SettingsPage({ onSaveSettings, settings, storageMode }: Settings
   return (
     <section className="mx-auto max-w-3xl space-y-5">
       <div>
-        <p className="label">{t("settings.section")}</p>
         <h2 className="text-2xl font-bold text-slate-50">{t("settings.title")}</h2>
       </div>
 

@@ -661,7 +661,6 @@ export function StatisticsPage({ profile, sessions }: StatisticsPageProps) {
   return (
     <section className="space-y-5">
       <div>
-        <p className="label">{t("statistics.section")}</p>
         <h2 className="text-2xl font-bold text-slate-50">{t("statistics.title")}</h2>
         <p className="mt-1 max-w-2xl text-sm text-slate-400">{t("statistics.description")}</p>
       </div>

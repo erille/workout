@@ -736,7 +736,6 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
   return (
     <section className="space-y-5">
       <div>
-        <p className="label">{t("character.section")}</p>
         <h2 className="text-2xl font-bold text-slate-50">{t("character.title")}</h2>
       </div>
 

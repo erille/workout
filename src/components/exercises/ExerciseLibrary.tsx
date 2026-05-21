@@ -639,7 +639,6 @@ export function ExerciseLibrary({
     <section className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="label">{t("exercises.section")}</p>
           <h2 className="text-2xl font-bold text-slate-50">{t("exercises.title")}</h2>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">

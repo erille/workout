@@ -597,7 +597,6 @@ export function WorkoutBuilder({
   return (
     <section className="space-y-5">
       <div>
-        <p className="label">{t("builder.section")}</p>
         <h2 className="text-2xl font-bold text-slate-50">{t("builder.title")}</h2>
         <p className="mt-1 max-w-2xl text-sm text-slate-400">{t("builder.description")}</p>
       </div>

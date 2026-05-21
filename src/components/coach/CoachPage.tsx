@@ -221,7 +221,6 @@ export function CoachPage({ onDataChanged }: CoachPageProps) {
     <section className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="label">{t("coach.section")}</p>
           <h2 className="text-2xl font-bold text-slate-50">{t("coach.title")}</h2>
           <p className="mt-1 max-w-2xl text-sm text-slate-400">{t("coach.description")}</p>
         </div>

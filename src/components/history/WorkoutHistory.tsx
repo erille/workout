@@ -470,7 +470,6 @@ export function WorkoutHistory({
     <section className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="label">{t("history.section")}</p>
           <h2 className="text-2xl font-bold text-slate-50">{t("history.title")}</h2>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">

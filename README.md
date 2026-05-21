@@ -164,6 +164,12 @@ OPENROUTER_APP_NAME=Workout
 
 The selected provider/model can be changed later because coach instructions, app data, and chat history are stored by Workout, not by the model provider.
 
+When using Docker Compose, these `.env` values are passed into the container by `docker-compose.yml`. Restart/recreate the container after changing them:
+
+```bash
+docker compose up -d --build
+```
+
 ## Security Notes
 
 - Real secrets must stay in `.env` or the server environment.

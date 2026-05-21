@@ -10,5 +10,12 @@ services:
     environment:
       WORKOUT_PASSWORD_HASH: ${WORKOUT_PASSWORD_HASH:-}
       WORKOUT_AUTH_SECRET: ${WORKOUT_AUTH_SECRET:-}
+      COACH_PROVIDER: ${COACH_PROVIDER:-openai}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-4.1-mini}
+      OPENROUTER_SITE_URL: ${OPENROUTER_SITE_URL:-http://localhost:8060}
+      OPENROUTER_APP_NAME: ${OPENROUTER_APP_NAME:-Workout}
     volumes:
       - /srv/webdata/workout:/data

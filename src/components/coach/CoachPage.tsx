@@ -246,13 +246,14 @@ export function CoachPage({ onDataChanged }: CoachPageProps) {
               </label>
               <textarea
                 id="coach-message"
-                className="field min-h-24 resize-y"
+                className="themed-scrollbar field h-11 max-h-32 resize-none py-2.5 leading-5"
+                rows={1}
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
                 onKeyDown={handleDraftKeyDown}
                 placeholder={t("coach.placeholder")}
               />
-              <button type="submit" className="primary-button self-end" disabled={isSending || !draft.trim()}>
+              <button type="submit" className="primary-button h-11 self-start" disabled={isSending || !draft.trim()}>
                 <Send aria-hidden="true" size={17} />
                 {isSending ? t("coach.sending") : t("coach.send")}
               </button>

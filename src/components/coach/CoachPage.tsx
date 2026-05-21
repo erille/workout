@@ -1,4 +1,4 @@
-import { Bot, Send, Trash2, UserRound } from "lucide-react";
+import { Bot, Eraser, Send, UserRound } from "lucide-react";
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { useI18n } from "../../i18n/I18nContext";
 
@@ -53,7 +53,13 @@ export function CoachPage({ onDataChanged }: CoachPageProps) {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
+  const [visibleSince, setVisibleSince] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const filterVisibleMessages = (nextMessages: CoachMessage[]) =>
+    visibleSince === null
+      ? nextMessages
+      : nextMessages.filter((message) => new Date(message.createdAt).getTime() >= visibleSince);
 
   useEffect(() => {
     let isMounted = true;
@@ -117,7 +123,7 @@ export function CoachPage({ onDataChanged }: CoachPageProps) {
         body: JSON.stringify({ language, message }),
       });
 
-      setMessages(response.messages);
+      setMessages(filterVisibleMessages(response.messages));
 
       if (response.dataChanged) {
         onDataChanged();
@@ -145,18 +151,10 @@ export function CoachPage({ onDataChanged }: CoachPageProps) {
     event.currentTarget.form?.requestSubmit();
   };
 
-  const clearMessages = async () => {
+  const clearMessages = () => {
+    setVisibleSince(Date.now());
+    setMessages([]);
     setError(null);
-
-    try {
-      const response = await apiJson<{ messages: CoachMessage[] }>("/api/coach/clear", {
-        method: "POST",
-        body: JSON.stringify({}),
-      });
-      setMessages(response.messages);
-    } catch (clearError) {
-      setError(clearError instanceof Error ? clearError.message : t("coach.errorClear"));
-    }
   };
 
   return (
@@ -169,13 +167,13 @@ export function CoachPage({ onDataChanged }: CoachPageProps) {
         </div>
         {messages.length > 0 ? (
           <button type="button" className="secondary-button w-fit" onClick={clearMessages}>
-            <Trash2 aria-hidden="true" size={17} />
+            <Eraser aria-hidden="true" size={17} />
             {t("coach.clear")}
           </button>
         ) : null}
       </div>
 
-      <div className="panel flex min-h-[34rem] flex-col p-4">
+      <div className="panel flex flex-col p-4">
         {isLoading ? (
           <div className="rounded-md border border-slate-800 bg-slate-950/70 p-4 text-slate-300">
             {t("coach.loading")}
@@ -196,9 +194,9 @@ export function CoachPage({ onDataChanged }: CoachPageProps) {
               </span>
             </div>
 
-            <div className="flex-1 space-y-3 overflow-y-auto rounded-md border border-slate-800 bg-slate-950/50 p-3">
+            <div className="themed-scrollbar h-[28rem] space-y-3 overflow-y-auto rounded-md border border-slate-800 bg-slate-950/50 p-3 sm:h-[34rem]">
               {messages.length === 0 ? (
-                <div className="flex min-h-80 items-center justify-center text-center text-sm text-slate-400">
+                <div className="flex h-full items-center justify-center text-center text-sm text-slate-400">
                   {t("coach.empty")}
                 </div>
               ) : (

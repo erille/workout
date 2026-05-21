@@ -1,4 +1,4 @@
-import { Download, Save, Upload, Volume1, Volume2, VolumeX } from "lucide-react";
+import { Download, Save, Trash2, Upload, Volume1, Volume2, VolumeX } from "lucide-react";
 import { type ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import { exportLocalData, importLocalData, type StorageMode } from "../../data/storage";
 import { useI18n } from "../../i18n/I18nContext";
@@ -39,6 +39,22 @@ function voiceLabel(
   return `${voice.name} (${voice.lang}, ${source}${defaultLabel})`;
 }
 
+async function postJson(path: string): Promise<void> {
+  const response = await fetch(path, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({}),
+  });
+
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(payload?.error ?? `API request failed: ${response.status}`);
+  }
+}
+
 function notificationIcon(mode: NotificationMode) {
   if (mode === "off") {
     return <VolumeX aria-hidden="true" size={22} />;
@@ -55,6 +71,11 @@ export function SettingsPage({ onSaveSettings, settings, storageMode }: Settings
   const { t } = useI18n();
   const [draft, setDraft] = useState<AppSettings>(settings);
   const [message, setMessage] = useState<string | null>(null);
+  const [coachHistoryMessage, setCoachHistoryMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+  const [isDeletingCoachHistory, setIsDeletingCoachHistory] = useState(false);
   const [ttsStatus, setTtsStatus] = useState<ServerTtsStatus | null | undefined>(undefined);
   const [voices, setVoices] = useState<SpeechVoiceOption[]>([]);
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -162,6 +183,30 @@ export function SettingsPage({ onSaveSettings, settings, storageMode }: Settings
       window.location.reload();
     } catch {
       window.alert(t("localData.importError"));
+    }
+  };
+
+  const handleDeleteCoachHistory = async () => {
+    if (!window.confirm(t("settings.coachHistoryDeleteConfirm"))) {
+      return;
+    }
+
+    setIsDeletingCoachHistory(true);
+    setCoachHistoryMessage(null);
+
+    try {
+      await postJson("/api/coach/clear");
+      setCoachHistoryMessage({
+        type: "success",
+        text: t("settings.coachHistoryDeleted"),
+      });
+    } catch {
+      setCoachHistoryMessage({
+        type: "error",
+        text: t("settings.coachHistoryDeleteError"),
+      });
+    } finally {
+      setIsDeletingCoachHistory(false);
     }
   };
 
@@ -508,6 +553,42 @@ export function SettingsPage({ onSaveSettings, settings, storageMode }: Settings
           ) : null}
         </div>
       </form>
+
+      {storageMode === "server" ? (
+        <div className="panel space-y-4 border-rose-500/50 p-4 sm:p-6">
+          <div>
+            <p className="label text-rose-200">{t("settings.dangerZone")}</p>
+            <h3 className="text-xl font-bold text-slate-50">{t("settings.coachHistoryTitle")}</h3>
+            <p className="mt-1 text-sm text-slate-400">{t("settings.coachHistoryDescription")}</p>
+          </div>
+
+          {coachHistoryMessage ? (
+            <div
+              className={`rounded-md border px-3 py-2 text-sm ${
+                coachHistoryMessage.type === "success"
+                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-100"
+                  : "border-rose-500/50 bg-rose-500/10 text-rose-100"
+              }`}
+            >
+              {coachHistoryMessage.text}
+            </div>
+          ) : null}
+
+          <button
+            type="button"
+            className="danger-button"
+            disabled={isDeletingCoachHistory}
+            onClick={() => {
+              void handleDeleteCoachHistory();
+            }}
+          >
+            <Trash2 aria-hidden="true" size={17} />
+            {isDeletingCoachHistory
+              ? t("settings.coachHistoryDeleting")
+              : t("settings.coachHistoryDelete")}
+          </button>
+        </div>
+      ) : null}
     </section>
   );
 }

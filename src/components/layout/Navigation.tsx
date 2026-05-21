@@ -107,7 +107,26 @@ export function Navigation({
     <header className="sticky top-0 z-20 border-b border-slate-800/90 bg-slate-950/88 backdrop-blur">
       <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-4 sm:px-6 lg:px-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
+          <a
+            className="flex items-center gap-3 rounded-md transition hover:opacity-90"
+            href="/"
+            aria-label={t("nav.home")}
+            onClick={(event) => {
+              if (
+                event.defaultPrevented ||
+                event.button !== 0 ||
+                event.metaKey ||
+                event.altKey ||
+                event.ctrlKey ||
+                event.shiftKey
+              ) {
+                return;
+              }
+
+              event.preventDefault();
+              onNavigate("home");
+            }}
+          >
             <div className="flex h-10 w-10 items-center justify-center rounded-md bg-cyan-400 text-slate-950">
               <Dumbbell aria-hidden="true" size={22} />
             </div>
@@ -115,7 +134,7 @@ export function Navigation({
               <h1 className="text-xl font-bold text-slate-50">Workout</h1>
               <p className="text-sm text-slate-400">{t("nav.subtitle")}</p>
             </div>
-          </div>
+          </a>
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-md border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm font-semibold text-slate-300">
               {modeLabel}

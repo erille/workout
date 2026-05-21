@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { LoginPage } from "../components/auth/LoginPage";
 import { CharacterSheet } from "../components/character/CharacterSheet";
+import { CoachPage } from "../components/coach/CoachPage";
 import { ExerciseLibrary } from "../components/exercises/ExerciseLibrary";
 import { WorkoutHistory } from "../components/history/WorkoutHistory";
 import { HomeDashboard } from "../components/home/HomeDashboard";
@@ -16,7 +17,7 @@ import { useProfile } from "../hooks/useProfile";
 import { useSettings } from "../hooks/useSettings";
 import { useWorkoutPlans } from "../hooks/useWorkoutPlans";
 import { I18nProvider, translate } from "../i18n/I18nContext";
-import type { StorageMode } from "../data/storage";
+import { invalidateServerDataCache, type StorageMode } from "../data/storage";
 import type { ExerciseCategoryDefinition } from "../models/exercise";
 import type { WorkoutSession } from "../models/session";
 import type { WorkoutPlan } from "../models/workout";
@@ -25,6 +26,7 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState<PageId>("home");
   const [activePlan, setActivePlan] = useState<WorkoutPlan | null>(null);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
+  const [serverDataReloadKey, setServerDataReloadKey] = useState(0);
   const { status: authStatus, isLoading: authLoading, login, logout } = useAuth();
   const storageMode: StorageMode =
     !authStatus.apiAvailable || (authStatus.authEnabled && !authStatus.authenticated)
@@ -32,10 +34,11 @@ export default function App() {
       : "server";
   const canLoadData = !authLoading;
   const { exercises, isLoading: exercisesLoading, saveAllExercises, saveExercise, deleteExercise } =
-    useExercises(storageMode, canLoadData);
+    useExercises(storageMode, canLoadData, serverDataReloadKey);
   const { plans, isLoading: plansLoading, savePlan, deletePlan } = useWorkoutPlans(
     storageMode,
     canLoadData,
+    serverDataReloadKey,
   );
   const { sessions, isLoading: sessionsLoading, addSession, deleteSession } = useSessions(
     storageMode,
@@ -48,6 +51,7 @@ export default function App() {
   const { settings, isLoading: settingsLoading, updateSettings } = useSettings(
     storageMode,
     canLoadData,
+    serverDataReloadKey,
   );
 
   const language = settings.language;
@@ -64,6 +68,12 @@ export default function App() {
   useEffect(() => {
     setActivePlan(null);
   }, [storageMode]);
+
+  useEffect(() => {
+    if (storageMode === "local" && currentPage === "coach") {
+      setCurrentPage("home");
+    }
+  }, [currentPage, storageMode]);
 
   useEffect(() => {
     if (!authStatus.authEnabled || authStatus.authenticated) {
@@ -110,6 +120,11 @@ export default function App() {
   const handleLogout = async () => {
     await logout();
     setActivePlan(null);
+  };
+
+  const handleCoachDataChanged = () => {
+    invalidateServerDataCache();
+    setServerDataReloadKey((current) => current + 1);
   };
 
   return (
@@ -180,6 +195,9 @@ export default function App() {
               )}
               {currentPage === "character" && (
                 <CharacterSheet profile={profile} onSaveProfile={updateProfile} />
+              )}
+              {currentPage === "coach" && storageMode === "server" && (
+                <CoachPage onDataChanged={handleCoachDataChanged} />
               )}
               {currentPage === "settings" && (
                 <SettingsPage

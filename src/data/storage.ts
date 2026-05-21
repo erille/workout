@@ -66,6 +66,10 @@ const DEFAULT_REPS = 20;
 
 let serverDataPromise: Promise<ServerData> | null = null;
 
+export function invalidateServerDataCache(): void {
+  serverDataPromise = null;
+}
+
 function canUseLocalStorage(): boolean {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
 }

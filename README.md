@@ -21,6 +21,7 @@ Workout is a local-first web app for building, running, and tracking workout ses
 - Quick interval timer with saved last-used work/rest/round settings.
 - Completed workout history with manual entry, workout/exercise filtering, and partial session tracking.
 - Statistics page with weekly/monthly/yearly workout counts and a first lifting-progress view for weighted reps.
+- Optional server-mode virtual coach chat backed by OpenAI or OpenRouter.
 - English and French interface.
 - Audio modes for local Piper TTS, browser voice, beeps, and silent workouts.
 - Separate app language and spoken announcement language.
@@ -45,6 +46,8 @@ Workout has two separated storage modes:
 Guest/local data is not automatically imported into the private database. This keeps visitor experiments separate from the owner database.
 
 Local mode includes JSON export/import from the top navigation so browser-only data can be backed up or moved to another browser.
+
+The virtual coach is intentionally server-mode only. It is hidden in guest/local mode because coach requests need a server-side API key and may create SQLite-backed Builds, exercises, and categories.
 
 ## Tech Stack
 
@@ -137,6 +140,30 @@ Generate a random cookie secret with Node:
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
+## Virtual Coach
+
+The Coach page is available only when the app is using server/private mode. It lets the server-side coach read workout data and create Builds, exercises, and categories directly after validating the generated data. Chat history is saved in the SQLite database.
+
+Configure one provider in `.env` or the server environment. OpenAI is the default:
+
+```text
+COACH_PROVIDER=openai
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-4.1-mini
+```
+
+OpenRouter can be used to try alternate models:
+
+```text
+COACH_PROVIDER=openrouter
+OPENROUTER_API_KEY=sk-or-...
+OPENROUTER_MODEL=openai/gpt-4.1-mini
+OPENROUTER_SITE_URL=https://your-workout-domain.example
+OPENROUTER_APP_NAME=Workout
+```
+
+The selected provider/model can be changed later because coach instructions, app data, and chat history are stored by Workout, not by the model provider.
+
 ## Security Notes
 
 - Real secrets must stay in `.env` or the server environment.
@@ -218,6 +245,10 @@ The seed command creates 3 demo plans and 11 completed sessions. It replaces onl
 | `GET /api/tts/status` | Private when login is enabled | Check local Piper TTS availability |
 | `POST /api/tts` | Private when login is enabled | Generate or reuse cached Piper speech |
 | `GET /api/tts/audio/:file` | Private when login is enabled | Play cached generated speech |
+| `GET /api/coach/status` | Private when login is enabled | Check virtual coach provider configuration |
+| `GET /api/coach/messages` | Private when login is enabled | Load saved coach chat history |
+| `POST /api/coach/chat` | Private when login is enabled | Send a coach message and allow validated app tools |
+| `POST /api/coach/clear` | Private when login is enabled | Clear coach chat history |
 | `PUT /api/exercises` | Private when login is enabled | Save exercises |
 | `PUT /api/plans` | Private when login is enabled | Save workout plans |
 | `PUT /api/sessions` | Private when login is enabled | Save history |

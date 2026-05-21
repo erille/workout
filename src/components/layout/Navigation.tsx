@@ -9,6 +9,7 @@ import {
   LogIn,
   LogOut,
   BarChart3,
+  MessageCircle,
   Settings,
   Timer,
   UserRound,
@@ -27,6 +28,7 @@ export type PageId =
   | "history"
   | "statistics"
   | "character"
+  | "coach"
   | "settings";
 
 type NavigationProps = {
@@ -49,6 +51,7 @@ const navItems = [
   { id: "history", labelKey: "nav.history", icon: History },
   { id: "statistics", labelKey: "nav.statistics", icon: BarChart3 },
   { id: "character", labelKey: "nav.character", icon: UserRound },
+  { id: "coach", labelKey: "nav.coach", icon: MessageCircle },
   { id: "settings", labelKey: "nav.settings", icon: Settings },
 ] satisfies Array<{ id: PageId; labelKey: TranslationKey; icon: typeof Dumbbell }>;
 
@@ -72,6 +75,8 @@ export function Navigation({
       : authEnabled
         ? t("auth.privateMode")
         : t("auth.serverMode");
+  const visibleNavItems =
+    storageMode === "server" ? navItems : navItems.filter((item) => item.id !== "coach");
 
   useEffect(() => {
     if (!isAboutOpen) {
@@ -169,7 +174,7 @@ export function Navigation({
           </div>
         </div>
         <nav className="flex gap-2 overflow-x-auto pb-1" aria-label={t("nav.aria")}>
-          {navItems.map(({ id, labelKey, icon: Icon }) => {
+          {visibleNavItems.map(({ id, labelKey, icon: Icon }) => {
             const isActive = currentPage === id;
 
             return (

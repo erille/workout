@@ -6,7 +6,7 @@ function sortExercises(exercises: Exercise[]): Exercise[] {
   return [...exercises].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export function useExercises(mode: StorageMode, enabled = true) {
+export function useExercises(mode: StorageMode, enabled = true, reloadKey = 0) {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [loadedMode, setLoadedMode] = useState<StorageMode | null>(null);
   const [isLoading, setIsLoading] = useState(enabled);
@@ -36,7 +36,7 @@ export function useExercises(mode: StorageMode, enabled = true) {
     return () => {
       isMounted = false;
     };
-  }, [enabled, mode]);
+  }, [enabled, mode, reloadKey]);
 
   const visibleExercises = loadedMode === mode ? exercises : [];
 

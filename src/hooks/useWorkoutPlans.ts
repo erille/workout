@@ -6,7 +6,7 @@ function sortPlans(plans: WorkoutPlan[]): WorkoutPlan[] {
   return [...plans].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
-export function useWorkoutPlans(mode: StorageMode, enabled = true) {
+export function useWorkoutPlans(mode: StorageMode, enabled = true, reloadKey = 0) {
   const [plans, setPlans] = useState<WorkoutPlan[]>([]);
   const [loadedMode, setLoadedMode] = useState<StorageMode | null>(null);
   const [isLoading, setIsLoading] = useState(enabled);
@@ -36,7 +36,7 @@ export function useWorkoutPlans(mode: StorageMode, enabled = true) {
     return () => {
       isMounted = false;
     };
-  }, [enabled, mode]);
+  }, [enabled, mode, reloadKey]);
 
   const visiblePlans = loadedMode === mode ? plans : [];
 

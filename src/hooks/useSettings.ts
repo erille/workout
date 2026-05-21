@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { getSettings, saveSettings, type StorageMode } from "../data/storage";
 import { defaultSettings, type AppSettings } from "../models/settings";
 
-export function useSettings(mode: StorageMode, enabled = true) {
+export function useSettings(mode: StorageMode, enabled = true, reloadKey = 0) {
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [loadedMode, setLoadedMode] = useState<StorageMode | null>(null);
   const [isLoading, setIsLoading] = useState(enabled);
@@ -32,7 +32,7 @@ export function useSettings(mode: StorageMode, enabled = true) {
     return () => {
       isMounted = false;
     };
-  }, [enabled, mode]);
+  }, [enabled, mode, reloadKey]);
 
   const visibleSettings = loadedMode === mode ? settings : defaultSettings;
 

@@ -678,7 +678,7 @@ const fr: Record<keyof typeof en, string> = {
   "history.manualErrorSave": "Impossible d'enregistrer cette session manuelle.",
   "coach.section": "Coach virtuel",
   "coach.title": "Coach sportif",
-  "coach.description": "Discute avec un coach côté serveur qui peut lire ton activité et créer des séances, exercices et catégories.",
+  "coach.description": "Discute avec un coach qui peut lire ton activité et créer des séances, exercices et catégories.",
   "coach.loading": "Chargement du coach...",
   "coach.notConfigured": "Le coach n'est pas configuré.",
   "coach.notConfiguredHelp": "Ajoute une clé API fournisseur dans l'environnement serveur pour activer cette page.",

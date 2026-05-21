@@ -436,7 +436,7 @@ const en = {
 
 const fr: Record<keyof typeof en, string> = {
   "app.loading": "Chargement des données d'entraînement...",
-  "nav.subtitle": "Planificateur d'entraînement local",
+  "nav.subtitle": "Suivi d’entraînement personnel",
   "nav.aria": "Navigation principale",
   "nav.home": "Accueil",
   "nav.exercises": "Exercices",

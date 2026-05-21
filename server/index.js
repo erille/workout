@@ -43,6 +43,16 @@ function loadDotEnv() {
 
 loadDotEnv();
 
+function readIntegerEnv(name, fallback, minimum, maximum) {
+  const parsed = Number(process.env[name]);
+
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+
+  return Math.min(maximum, Math.max(minimum, Math.round(parsed)));
+}
+
 const port = Number(process.env.PORT ?? 8060);
 const publicDir = resolve(process.env.WORKOUT_PUBLIC_DIR ?? "dist");
 const dbPath = resolve(process.env.WORKOUT_DB_PATH ?? join("data", "workout.sqlite"));
@@ -65,6 +75,8 @@ const openAiModel = process.env.OPENAI_MODEL?.trim() || "gpt-4.1-mini";
 const openRouterModel = process.env.OPENROUTER_MODEL?.trim() || "openai/gpt-4.1-mini";
 const openAiApiKey = process.env.OPENAI_API_KEY?.trim() || "";
 const openRouterApiKey = process.env.OPENROUTER_API_KEY?.trim() || "";
+const coachRequestTimeoutMs = readIntegerEnv("COACH_REQUEST_TIMEOUT_MS", 45000, 5000, 180000);
+const coachMaxTokens = readIntegerEnv("COACH_MAX_TOKENS", 1200, 256, 4096);
 
 mkdirSync(dirname(dbPath), { recursive: true });
 
@@ -644,10 +656,73 @@ function createCoachSystemPrompt(language) {
     "Be practical, concise, encouraging, and specific. Use the user's app data through tools before giving plans or progress advice.",
     "You can discuss workout planning, recovery, motivation, and general non-medical nutrition guidance.",
     "Do not diagnose or treat medical issues. If the user mentions pain, injury, dizziness, chest pain, or medical symptoms, advise stopping the workout when appropriate and consulting a qualified professional.",
+    "Use the provided app data snapshot first. Call read tools only when the snapshot is not enough.",
+    "For workout/build creation, keep tool use efficient: decide from the snapshot when possible, then call create_build directly.",
     "Prefer existing exercises and categories. If something important is missing, create a category first, then create the exercise.",
     "When the user asks you to create a workout/build, create it directly with the create_build tool. Do not ask for user confirmation unless required details are missing.",
     "You may create categories, exercises, and builds only. Never delete or overwrite existing user data.",
   ].join("\n");
+}
+
+function createCoachDataSnapshot() {
+  const profile = readProfile();
+  const measurements = [...profile.measurements]
+    .sort((a, b) => new Date(b.measuredAt).getTime() - new Date(a.measuredAt).getTime())
+    .slice(0, 6);
+  const settings = readSettings();
+  const exercises = readCollection("exercises").map((exercise) => ({
+    id: exercise.id,
+    name: exercise.name,
+    category: exercise.category,
+    defaultMode: exercise.defaultMode,
+    defaultDurationSeconds: exercise.defaultDurationSeconds,
+    defaultReps: exercise.defaultReps,
+    defaultDistanceMeters: exercise.defaultDistanceMeters,
+  }));
+  const recentSessions = readCollection("sessions")
+    .slice(0, 5)
+    .map((session) => ({
+      workoutName: session.workoutName,
+      startedAt: session.startedAt,
+      completedAt: session.completedAt,
+      completed: session.completed,
+      roundsCompleted: session.roundsCompleted,
+      steps: session.steps.map((step) => ({
+        exerciseName: step.exerciseName,
+        type: step.type,
+        target: summarizeTarget(step),
+        breakSeconds: step.breakSeconds,
+        weight: step.weight,
+        round: step.round,
+      })),
+    }));
+  const builds = readCollection("plans")
+    .slice(0, 20)
+    .map((plan) => ({
+      name: plan.name,
+      rounds: plan.rounds,
+      steps: plan.steps.map((step) => ({
+        exerciseName: step.exerciseName,
+        type: step.type,
+        target: summarizeTarget(step),
+        breakSeconds: step.breakSeconds,
+        weight: step.weight,
+      })),
+    }));
+
+  return {
+    profile: {
+      name: profile.name,
+      age: profile.age,
+      heightCm: profile.heightCm,
+      latestMeasurements: measurements,
+    },
+    stats: getWorkoutStats(),
+    categories: settings.exerciseCategories,
+    exercises,
+    recentSessions,
+    builds,
+  };
 }
 
 function numberInRange(value, fallback, minimum, maximum = Number.POSITIVE_INFINITY) {
@@ -819,6 +894,81 @@ function summarizeTarget(step) {
   }
 
   return `${step.reps} reps`;
+}
+
+function summarizeWeight(step) {
+  return step.weight === undefined || step.weight === null ? "" : `, ${step.weight} kg`;
+}
+
+function summarizeCreatedBuild(plan, language) {
+  const lines = plan.steps.map(
+    (step, index) =>
+      `${index + 1}. ${step.exerciseName} - ${summarizeTarget(step)}${summarizeWeight(step)}, repos ${step.breakSeconds}s`,
+  );
+
+  if (language === "en") {
+    return [
+      `I created the Build "${plan.name}" with ${plan.rounds} rounds.`,
+      "",
+      ...lines,
+      "",
+      "It is now available in your Builds.",
+    ].join("\n");
+  }
+
+  return [
+    `J'ai créé la séance "${plan.name}" avec ${plan.rounds} tours.`,
+    "",
+    ...lines,
+    "",
+    "Elle est maintenant disponible dans tes Builds.",
+  ].join("\n");
+}
+
+function providerLabel(provider) {
+  return provider === "openrouter" ? "OpenRouter" : "OpenAI";
+}
+
+function compactProviderError(errorText) {
+  const trimmed = errorText.trim();
+
+  if (!trimmed) {
+    return "";
+  }
+
+  return trimmed.length > 300 ? `${trimmed.slice(0, 300)}...` : trimmed;
+}
+
+function createCoachProviderErrorMessage(provider, status, errorText, language) {
+  const name = providerLabel(provider);
+
+  if (status === 408 || status === 504) {
+    return language === "en"
+      ? `${name} did not answer quickly enough (${status}). The model is probably busy or too slow for this request. Try again, or switch to a faster model.`
+      : `${name} n'a pas répondu assez vite (${status}). Le modèle est probablement saturé ou trop lent pour cette demande. Réessaie, ou choisis un modèle plus rapide.`;
+  }
+
+  if (status === 429) {
+    return language === "en"
+      ? `${name} refused the request because of quota or rate limits (429). Try again later or choose another model/provider.`
+      : `${name} a refusé la requête à cause du quota ou des limites de débit (429). Réessaie plus tard ou choisis un autre modèle/fournisseur.`;
+  }
+
+  const detail = compactProviderError(errorText);
+  const suffix = detail ? ` ${detail}` : "";
+
+  return language === "en"
+    ? `${name} returned an error (${status}).${suffix}`
+    : `${name} a renvoyé une erreur (${status}).${suffix}`;
+}
+
+class CoachProviderError extends Error {
+  constructor(provider, status, errorText, language) {
+    super(createCoachProviderErrorMessage(provider, status, errorText, language));
+    this.name = "CoachProviderError";
+    this.provider = provider;
+    this.status = status;
+  }
 }
 
 const coachTools = [
@@ -1179,7 +1329,7 @@ function executeCoachTool(name, args, language) {
   throw new Error(`Unsupported coach tool: ${name}`);
 }
 
-async function requestCoachCompletion(config, messages) {
+async function requestCoachCompletion(config, messages, language) {
   const endpoint =
     config.provider === "openrouter"
       ? "https://openrouter.ai/api/v1/chat/completions"
@@ -1194,21 +1344,37 @@ async function requestCoachCompletion(config, messages) {
     headers["X-Title"] = process.env.OPENROUTER_APP_NAME?.trim() || "Workout";
   }
 
-  const apiResponse = await fetch(endpoint, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      model: config.model,
-      messages,
-      tools: coachTools,
-      tool_choice: "auto",
-      temperature: 0.4,
-    }),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), coachRequestTimeoutMs);
+  let apiResponse;
+
+  try {
+    apiResponse = await fetch(endpoint, {
+      method: "POST",
+      headers,
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: config.model,
+        messages,
+        tools: coachTools,
+        tool_choice: "auto",
+        temperature: 0.4,
+        max_tokens: coachMaxTokens,
+      }),
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new CoachProviderError(config.provider, 504, "", language);
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!apiResponse.ok) {
     const errorText = await apiResponse.text();
-    throw new Error(`Coach provider error (${apiResponse.status}): ${errorText}`);
+    throw new CoachProviderError(config.provider, apiResponse.status, errorText, language);
   }
 
   const payload = await apiResponse.json();
@@ -1230,6 +1396,10 @@ async function runCoachConversation(userMessages, language) {
 
   const messages = [
     { role: "system", content: createCoachSystemPrompt(language) },
+    {
+      role: "system",
+      content: `Current Workout app data snapshot as JSON:\n${JSON.stringify(createCoachDataSnapshot())}`,
+    },
     ...userMessages.map((message) => ({
       role: message.role,
       content: message.content,
@@ -1238,7 +1408,26 @@ async function runCoachConversation(userMessages, language) {
   let dataChanged = false;
 
   for (let toolRound = 0; toolRound < 6; toolRound += 1) {
-    const assistantMessage = await requestCoachCompletion(config, messages);
+    let assistantMessage;
+
+    try {
+      assistantMessage = await requestCoachCompletion(config, messages, language);
+    } catch (error) {
+      if (dataChanged) {
+        return {
+          content:
+            language === "en"
+              ? "I updated your workout data, but the coach provider timed out before I could generate the final explanation. Refresh the app data if the new item is not visible yet."
+              : "J'ai mis à jour tes données d'entraînement, mais le fournisseur du coach a expiré avant de générer l'explication finale. Rafraîchis les données si le nouvel élément n'est pas encore visible.",
+          dataChanged,
+          provider: config.provider,
+          model: config.model,
+        };
+      }
+
+      throw error;
+    }
+
     const toolCalls = Array.isArray(assistantMessage.tool_calls)
       ? assistantMessage.tool_calls
       : [];
@@ -1274,6 +1463,15 @@ async function runCoachConversation(userMessages, language) {
           tool_call_id: toolCall.id,
           content: JSON.stringify({ ok: true, result: toolResult.result }),
         });
+
+        if (toolName === "create_build" && toolResult.result?.plan) {
+          return {
+            content: summarizeCreatedBuild(toolResult.result.plan, language),
+            dataChanged,
+            provider: config.provider,
+            model: config.model,
+          };
+        }
       } catch (error) {
         messages.push({
           role: "tool",
@@ -1337,18 +1535,35 @@ async function handleCoachApi(request, response, pathname) {
       return true;
     }
 
-    writeCoachMessage("user", content, config.provider, config.model);
-    const conversation = readCoachMessages(30);
-    const result = await runCoachConversation(conversation, language);
-    writeCoachMessage("assistant", result.content, result.provider, result.model);
+    const conversation = [
+      ...readCoachMessages(29),
+      {
+        id: createId("coach-message"),
+        role: "user",
+        content,
+        createdAt: new Date().toISOString(),
+        provider: config.provider,
+        model: config.model,
+      },
+    ];
 
-    jsonResponse(response, 200, {
-      message: result.content,
-      messages: readCoachMessages(),
-      dataChanged: result.dataChanged,
-      provider: result.provider,
-      model: result.model,
-    });
+    try {
+      const result = await runCoachConversation(conversation, language);
+      writeCoachMessage("user", content, config.provider, config.model);
+      writeCoachMessage("assistant", result.content, result.provider, result.model);
+
+      jsonResponse(response, 200, {
+        message: result.content,
+        messages: readCoachMessages(),
+        dataChanged: result.dataChanged,
+        provider: result.provider,
+        model: result.model,
+      });
+    } catch (error) {
+      jsonResponse(response, error instanceof CoachProviderError ? 502 : 500, {
+        error: error instanceof Error ? error.message : "Server error",
+      });
+    }
     return true;
   }
 

@@ -150,6 +150,8 @@ Configure one provider in `.env` or the server environment. OpenAI is the defaul
 COACH_PROVIDER=openai
 OPENAI_API_KEY=sk-...
 OPENAI_MODEL=gpt-4.1-mini
+COACH_REQUEST_TIMEOUT_MS=45000
+COACH_MAX_TOKENS=1200
 ```
 
 OpenRouter can be used to try alternate models:
@@ -163,6 +165,8 @@ OPENROUTER_APP_NAME=Workout
 ```
 
 The selected provider/model can be changed later because coach instructions, app data, and chat history are stored by Workout, not by the model provider.
+
+`COACH_REQUEST_TIMEOUT_MS` defaults to 45 seconds so a slow provider fails before a typical HTTPS reverse proxy returns a generic 504. Free OpenRouter models can still be unavailable or slow during busy periods; if this happens repeatedly, choose a faster model or raise both this timeout and your reverse proxy timeout.
 
 When using Docker Compose, these `.env` values are passed into the container by `docker-compose.yml`. Restart/recreate the container after changing them:
 

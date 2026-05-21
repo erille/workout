@@ -1,5 +1,5 @@
 import { Bot, Send, Trash2, UserRound } from "lucide-react";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { useI18n } from "../../i18n/I18nContext";
 
 type CoachStatus = {
@@ -131,6 +131,20 @@ export function CoachPage({ onDataChanged }: CoachPageProps) {
     }
   };
 
+  const handleDraftKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== "Enter" || event.altKey || event.nativeEvent.isComposing) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (!draft.trim() || isSending) {
+      return;
+    }
+
+    event.currentTarget.form?.requestSubmit();
+  };
+
   const clearMessages = async () => {
     setError(null);
 
@@ -237,6 +251,7 @@ export function CoachPage({ onDataChanged }: CoachPageProps) {
                 className="field min-h-24 resize-y"
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={handleDraftKeyDown}
                 placeholder={t("coach.placeholder")}
               />
               <button type="submit" className="primary-button self-end" disabled={isSending || !draft.trim()}>

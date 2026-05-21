@@ -1,5 +1,12 @@
 import { Bot, Eraser, Send, UserRound } from "lucide-react";
-import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
+import {
+  type FormEvent,
+  type KeyboardEvent,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { useI18n } from "../../i18n/I18nContext";
 
 type CoachStatus = {
@@ -67,7 +74,6 @@ export function CoachPage({ onDataChanged }: CoachPageProps) {
   const [olderCursor, setOlderCursor] = useState<number | undefined>(undefined);
   const [visibleSince, setVisibleSince] = useState<number | null>(null);
   const messagesPanelRef = useRef<HTMLDivElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const previousScrollHeightRef = useRef<number | null>(null);
 
   const filterVisibleMessages = (nextMessages: CoachMessage[]) =>
@@ -109,22 +115,22 @@ export function CoachPage({ onDataChanged }: CoachPageProps) {
     };
   }, [t]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const panel = messagesPanelRef.current;
+
+    if (!panel) {
+      return;
+    }
+
     if (previousScrollHeightRef.current !== null) {
       const previousScrollHeight = previousScrollHeightRef.current;
       previousScrollHeightRef.current = null;
 
-      window.requestAnimationFrame(() => {
-        const panel = messagesPanelRef.current;
-
-        if (panel) {
-          panel.scrollTop += panel.scrollHeight - previousScrollHeight;
-        }
-      });
+      panel.scrollTop += panel.scrollHeight - previousScrollHeight;
       return;
     }
 
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    panel.scrollTop = panel.scrollHeight;
   }, [messages]);
 
   const sendMessage = async (event: FormEvent<HTMLFormElement>) => {
@@ -298,7 +304,6 @@ export function CoachPage({ onDataChanged }: CoachPageProps) {
                   );
                 })
               )}
-              <div ref={messagesEndRef} />
             </div>
 
             {error ? (

@@ -343,6 +343,17 @@ export function WorkoutBuilder({
   plans,
 }: WorkoutBuilderProps) {
   const { language, t } = useI18n();
+  const sortedExercises = useMemo(() => {
+    const locale = language === "fr" ? "fr" : "en";
+
+    return [...exercises].sort((firstExercise, secondExercise) =>
+      translateExerciseName(firstExercise, language).localeCompare(
+        translateExerciseName(secondExercise, language),
+        locale,
+        { sensitivity: "base" },
+      ),
+    );
+  }, [exercises, language]);
   const [draft, setDraft] = useState<DraftPlan>({
     ...emptyDraft,
     name: t("builder.defaultName"),
@@ -353,9 +364,9 @@ export function WorkoutBuilder({
     distanceMeters: 500,
     breakSeconds: 15,
   });
-  const [selectedExerciseId, setSelectedExerciseId] = useState(exercises[0]?.id ?? "");
+  const [selectedExerciseId, setSelectedExerciseId] = useState(sortedExercises[0]?.id ?? "");
   const [selectedStepType, setSelectedStepType] = useState<WorkoutStep["type"]>(
-    exercises[0]?.defaultMode ?? "reps",
+    sortedExercises[0]?.defaultMode ?? "reps",
   );
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -372,29 +383,29 @@ export function WorkoutBuilder({
     const normalizedQuery = query.trim().toLowerCase();
 
     if (!normalizedQuery) {
-      return exercises;
+      return sortedExercises;
     }
 
-    return exercises.filter((exercise) =>
+    return sortedExercises.filter((exercise) =>
       exercise.name.toLowerCase().includes(normalizedQuery) ||
       translateExerciseName(exercise, language).toLowerCase().includes(normalizedQuery),
     );
-  }, [exercises, language, query]);
+  }, [language, query, sortedExercises]);
 
   const selectedExercise = exercises.find((exercise) => exercise.id === selectedExerciseId);
 
   useEffect(() => {
-    if (exercises.length === 0) {
+    if (sortedExercises.length === 0) {
       return;
     }
 
-    const selectedExerciseExists = exercises.some((exercise) => exercise.id === selectedExerciseId);
+    const selectedExerciseExists = sortedExercises.some((exercise) => exercise.id === selectedExerciseId);
 
     if (!selectedExerciseExists) {
-      setSelectedExerciseId(exercises[0].id);
-      setSelectedStepType(exercises[0].defaultMode);
+      setSelectedExerciseId(sortedExercises[0].id);
+      setSelectedStepType(sortedExercises[0].defaultMode);
     }
-  }, [exercises, selectedExerciseId]);
+  }, [selectedExerciseId, sortedExercises]);
 
   const updateDraftSteps = (update: (steps: WorkoutStep[]) => WorkoutStep[]) => {
     setDraft((current) => ({ ...current, steps: update(current.steps) }));
@@ -731,7 +742,7 @@ export function WorkoutBuilder({
                   }
                 }}
               >
-                {exercises.map((exercise) => (
+                {sortedExercises.map((exercise) => (
                   <option key={exercise.id} value={exercise.id}>
                     {translateExerciseName(exercise, language)}
                   </option>

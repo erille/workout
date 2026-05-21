@@ -146,6 +146,18 @@ export function ExerciseLibrary({
     );
   }, [language, t, visibleCategories]);
 
+  const sortedCategoryOptions = useMemo(() => {
+    const locale = language === "fr" ? "fr" : "en";
+
+    return [...visibleCategories].sort((firstCategory, secondCategory) =>
+      categoryLabel(firstCategory, language, t).localeCompare(
+        categoryLabel(secondCategory, language, t),
+        locale,
+        { sensitivity: "base" },
+      ),
+    );
+  }, [language, t, visibleCategories]);
+
   const getCategoryLabel = (categoryId: string) => categoryLabelsById.get(categoryId) ?? categoryId;
 
   const filteredExercises = useMemo(() => {
@@ -518,7 +530,7 @@ export function ExerciseLibrary({
             }))
           }
         >
-          {visibleCategories.map((category) => (
+          {sortedCategoryOptions.map((category) => (
             <option key={category.id} value={category.id}>
               {categoryLabel(category, language, t)}
             </option>

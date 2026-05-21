@@ -47,11 +47,11 @@ const navItems = [
   { id: "home", labelKey: "nav.home", icon: House },
   { id: "exercises", labelKey: "nav.exercises", icon: Library },
   { id: "builder", labelKey: "nav.builder", icon: ListChecks },
+  { id: "coach", labelKey: "nav.coach", icon: MessageCircle },
   { id: "timer", labelKey: "nav.timer", icon: Timer },
   { id: "history", labelKey: "nav.history", icon: History },
   { id: "statistics", labelKey: "nav.statistics", icon: BarChart3 },
   { id: "character", labelKey: "nav.character", icon: UserRound },
-  { id: "coach", labelKey: "nav.coach", icon: MessageCircle },
   { id: "settings", labelKey: "nav.settings", icon: Settings },
 ] satisfies Array<{ id: PageId; labelKey: TranslationKey; icon: typeof Dumbbell }>;
 

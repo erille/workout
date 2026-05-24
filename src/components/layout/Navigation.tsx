@@ -193,7 +193,10 @@ export function Navigation({
             ) : null}
           </div>
         </div>
-        <nav className="flex gap-2 overflow-x-auto pb-1" aria-label={t("nav.aria")}>
+        <nav
+          className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          aria-label={t("nav.aria")}
+        >
           {visibleNavItems.map(({ id, labelKey, icon: Icon }) => {
             const isActive = currentPage === id;
 

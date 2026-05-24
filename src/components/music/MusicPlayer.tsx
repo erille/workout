@@ -56,11 +56,16 @@ export function MusicPlayer({ enabled }: MusicPlayerProps) {
   const { t } = useI18n();
   const audioRef = useRef<HTMLAudioElement>(null);
   const volumePanelRef = useRef<HTMLDivElement>(null);
+  const volumeButtonRef = useRef<HTMLButtonElement>(null);
   const [tracks, setTracks] = useState<MusicTrack[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolume] = useState(0.7);
   const [isVolumeOpen, setIsVolumeOpen] = useState(false);
+  const [volumePanelPosition, setVolumePanelPosition] = useState<{
+    left: number;
+    top: number;
+  } | null>(null);
   const currentTrack = tracks[currentIndex];
 
   useEffect(() => {
@@ -139,8 +144,36 @@ export function MusicPlayer({ enabled }: MusicPlayerProps) {
       return undefined;
     }
 
+    const positionVolumePanel = () => {
+      const button = volumeButtonRef.current;
+
+      if (!button) {
+        return;
+      }
+
+      const rect = button.getBoundingClientRect();
+      const panelWidth = 72;
+      const panelHeight = 150;
+      const gap = 8;
+      const preferredTop = rect.bottom + gap;
+      const top =
+        preferredTop + panelHeight <= window.innerHeight
+          ? preferredTop
+          : Math.max(gap, rect.top - panelHeight - gap);
+      const left = Math.min(
+        window.innerWidth - panelWidth - gap,
+        Math.max(gap, rect.left + rect.width / 2 - panelWidth / 2),
+      );
+
+      setVolumePanelPosition({ left, top });
+    };
     const handlePointerDown = (event: PointerEvent) => {
-      if (!volumePanelRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node;
+
+      if (
+        !volumePanelRef.current?.contains(target) &&
+        !volumeButtonRef.current?.contains(target)
+      ) {
         setIsVolumeOpen(false);
       }
     };
@@ -150,12 +183,17 @@ export function MusicPlayer({ enabled }: MusicPlayerProps) {
       }
     };
 
+    positionVolumePanel();
     document.addEventListener("pointerdown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", positionVolumePanel);
+    window.addEventListener("scroll", positionVolumePanel, true);
 
     return () => {
       document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", positionVolumePanel);
+      window.removeEventListener("scroll", positionVolumePanel, true);
     };
   }, [isVolumeOpen]);
 
@@ -204,7 +242,7 @@ export function MusicPlayer({ enabled }: MusicPlayerProps) {
   }
 
   return (
-    <div className="inline-flex min-h-11 w-72 shrink-0 items-center gap-1 rounded-md border border-slate-800 bg-slate-900/70 px-2 text-slate-300">
+    <div className="inline-flex min-h-11 w-52 shrink-0 items-center gap-1 rounded-md border border-slate-800 bg-slate-900/70 px-2 text-slate-300 lg:w-56">
       <audio
         ref={audioRef}
         src={currentTrack.url}
@@ -252,6 +290,7 @@ export function MusicPlayer({ enabled }: MusicPlayerProps) {
       </span>
       <div ref={volumePanelRef} className="relative shrink-0">
         <button
+          ref={volumeButtonRef}
           type="button"
           className="inline-flex h-8 w-8 items-center justify-center rounded-md hover:bg-slate-800 hover:text-slate-50"
           aria-label={t("music.volume", { value: volumeLabel })}
@@ -260,8 +299,14 @@ export function MusicPlayer({ enabled }: MusicPlayerProps) {
         >
           {volumeIcon(volume)}
         </button>
-        {isVolumeOpen ? (
-          <div className="absolute right-0 top-full z-30 mt-2 flex flex-col items-center gap-2 rounded-md border border-slate-700 bg-slate-900 px-3 py-3 shadow-2xl">
+        {isVolumeOpen && volumePanelPosition ? (
+          <div
+            className="fixed z-50 flex flex-col items-center gap-2 rounded-md border border-slate-700 bg-slate-900 px-3 py-3 shadow-2xl"
+            style={{
+              left: `${volumePanelPosition.left}px`,
+              top: `${volumePanelPosition.top}px`,
+            }}
+          >
             <input
               className="h-24 w-6 accent-cyan-300"
               min={0}

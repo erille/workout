@@ -14,7 +14,7 @@ import {
   Timer,
   UserRound,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import type { Language } from "../../i18n/translations";
 import type { TranslationKey } from "../../i18n/translations";
 import { useI18n } from "../../i18n/I18nContext";
@@ -53,7 +53,6 @@ const navItems = [
   { id: "history", labelKey: "nav.history", icon: History },
   { id: "statistics", labelKey: "nav.statistics", icon: BarChart3 },
   { id: "character", labelKey: "nav.character", icon: UserRound },
-  { id: "settings", labelKey: "nav.settings", icon: Settings },
 ] satisfies Array<{ id: PageId; labelKey: TranslationKey; icon: typeof Dumbbell }>;
 
 export function Navigation({
@@ -137,7 +136,6 @@ export function Navigation({
             </div>
           </a>
           <div className="flex flex-wrap items-center gap-2">
-            <MusicPlayer enabled={storageMode === "server"} />
             <span className="rounded-md border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm font-semibold text-slate-300">
               {modeLabel}
             </span>
@@ -180,6 +178,14 @@ export function Navigation({
               <Globe2 aria-hidden="true" size={17} />
               {language.toUpperCase()}
             </button>
+            <button
+              type="button"
+              className={`${currentPage === "settings" ? "primary-button" : "secondary-button"} px-3`}
+              onClick={() => onNavigate("settings")}
+            >
+              <Settings aria-hidden="true" size={17} />
+              {t("nav.settings")}
+            </button>
             {authEnabled && isAuthenticated ? (
               <button type="button" className="secondary-button px-3" onClick={onLogout}>
                 <LogOut aria-hidden="true" size={17} />
@@ -202,19 +208,21 @@ export function Navigation({
             const isActive = currentPage === id;
 
             return (
-              <button
-                key={id}
-                type="button"
-                className={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold transition ${
-                  isActive
-                    ? "bg-cyan-400 text-slate-950"
-                    : "border border-slate-800 bg-slate-900/70 text-slate-300 hover:border-slate-600 hover:text-slate-50"
-                }`}
-                onClick={() => onNavigate(id)}
-              >
-                <Icon aria-hidden="true" size={18} />
-                {t(labelKey)}
-              </button>
+              <Fragment key={id}>
+                <button
+                  type="button"
+                  className={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold transition ${
+                    isActive
+                      ? "bg-cyan-400 text-slate-950"
+                      : "border border-slate-800 bg-slate-900/70 text-slate-300 hover:border-slate-600 hover:text-slate-50"
+                  }`}
+                  onClick={() => onNavigate(id)}
+                >
+                  <Icon aria-hidden="true" size={18} />
+                  {t(labelKey)}
+                </button>
+                {id === "character" ? <MusicPlayer enabled={storageMode === "server"} /> : null}
+              </Fragment>
             );
           })}
         </nav>

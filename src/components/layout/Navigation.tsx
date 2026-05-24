@@ -194,7 +194,7 @@ export function Navigation({
           </div>
         </div>
         <nav
-          className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] sm:flex-wrap sm:overflow-visible [&::-webkit-scrollbar]:hidden"
           aria-label={t("nav.aria")}
         >
           {visibleNavItems.map(({ id, labelKey, icon: Icon }) => {

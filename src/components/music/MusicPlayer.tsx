@@ -198,6 +198,7 @@ export function MusicPlayer({ enabled }: MusicPlayerProps) {
   }, [isVolumeOpen]);
 
   const hasMultipleTracks = tracks.length > 1;
+  const playerWidthClass = hasMultipleTracks ? "w-52 lg:w-56" : "w-40 lg:w-44";
   const volumeLabel = useMemo(() => Math.round(volume * 100), [volume]);
 
   const goToTrack = (nextIndex: number) => {
@@ -242,7 +243,9 @@ export function MusicPlayer({ enabled }: MusicPlayerProps) {
   }
 
   return (
-    <div className="inline-flex min-h-11 w-52 shrink-0 items-center gap-1 rounded-md border border-slate-800 bg-slate-900/70 px-2 text-slate-300 lg:w-56">
+    <div
+      className={`inline-flex min-h-11 shrink-0 items-center gap-1 rounded-md border border-slate-800 bg-slate-900/70 px-2 text-slate-300 ${playerWidthClass}`}
+    >
       <audio
         ref={audioRef}
         src={currentTrack.url}
@@ -259,15 +262,16 @@ export function MusicPlayer({ enabled }: MusicPlayerProps) {
         onPause={() => setIsPlaying(false)}
         onPlay={() => setIsPlaying(true)}
       />
-      <button
-        type="button"
-        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md hover:bg-slate-800 hover:text-slate-50 disabled:opacity-40"
-        aria-label={t("music.previous")}
-        disabled={!hasMultipleTracks}
-        onClick={() => goToTrack(currentIndex - 1)}
-      >
-        <SkipBack aria-hidden="true" size={16} />
-      </button>
+      {hasMultipleTracks ? (
+        <button
+          type="button"
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md hover:bg-slate-800 hover:text-slate-50"
+          aria-label={t("music.previous")}
+          onClick={() => goToTrack(currentIndex - 1)}
+        >
+          <SkipBack aria-hidden="true" size={16} />
+        </button>
+      ) : null}
       <button
         type="button"
         className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-cyan-400 text-slate-950 transition hover:bg-cyan-300"
@@ -276,15 +280,16 @@ export function MusicPlayer({ enabled }: MusicPlayerProps) {
       >
         {isPlaying ? <Pause aria-hidden="true" size={16} /> : <Play aria-hidden="true" size={16} />}
       </button>
-      <button
-        type="button"
-        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md hover:bg-slate-800 hover:text-slate-50 disabled:opacity-40"
-        aria-label={t("music.next")}
-        disabled={!hasMultipleTracks}
-        onClick={() => goToTrack(currentIndex + 1)}
-      >
-        <SkipForward aria-hidden="true" size={16} />
-      </button>
+      {hasMultipleTracks ? (
+        <button
+          type="button"
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md hover:bg-slate-800 hover:text-slate-50"
+          aria-label={t("music.next")}
+          onClick={() => goToTrack(currentIndex + 1)}
+        >
+          <SkipForward aria-hidden="true" size={16} />
+        </button>
+      ) : null}
       <span className="min-w-0 flex-1 truncate px-1 text-xs font-semibold text-slate-200">
         {currentTrack.title}
       </span>

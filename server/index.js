@@ -1,4 +1,4 @@
-import { createReadStream, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { createReadStream, existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { createServer } from "node:http";
 import { dirname, extname, join, resolve, sep } from "node:path";
@@ -56,6 +56,13 @@ function readIntegerEnv(name, fallback, minimum, maximum) {
 const port = Number(process.env.PORT ?? 8060);
 const publicDir = resolve(process.env.WORKOUT_PUBLIC_DIR ?? "dist");
 const dbPath = resolve(process.env.WORKOUT_DB_PATH ?? join("data", "workout.sqlite"));
+const configuredMusicDir = process.env.WORKOUT_MUSIC_DIR?.trim();
+const musicDirCandidates = [
+  configuredMusicDir ? resolve(configuredMusicDir) : null,
+  resolve(join(dirname(dbPath), "data", "mp3")),
+  resolve(join(dirname(dbPath), "mp3")),
+  resolve(join("data", "mp3")),
+].filter(Boolean);
 const passwordHash = process.env.WORKOUT_PASSWORD_HASH?.trim() || "";
 const authEnabled = passwordHash.length > 0;
 const authSecret = process.env.WORKOUT_AUTH_SECRET?.trim() || passwordHash || "workout-dev-secret";
@@ -138,6 +145,115 @@ function emptyResponse(response, statusCode = 204) {
     "Access-Control-Allow-Credentials": "true",
   });
   response.end();
+}
+
+function resolveMusicDir() {
+  const existingDir = musicDirCandidates.find((candidate) => {
+    try {
+      return candidate && existsSync(candidate) && statSync(candidate).isDirectory();
+    } catch {
+      return false;
+    }
+  });
+  const musicDir = existingDir ?? musicDirCandidates[0];
+
+  if (musicDir) {
+    mkdirSync(musicDir, { recursive: true });
+  }
+
+  return musicDir;
+}
+
+function titleFromAudioFile(fileName) {
+  return fileName
+    .replace(/\.[^.]+$/, "")
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function readMusicTracks() {
+  const musicDir = resolveMusicDir();
+
+  if (!musicDir) {
+    return [];
+  }
+
+  return readdirSync(musicDir, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && extname(entry.name).toLowerCase() === ".mp3")
+    .map((entry) => ({
+      id: entry.name,
+      title: titleFromAudioFile(entry.name) || entry.name,
+      url: `/api/music/audio/${encodeURIComponent(entry.name)}`,
+    }))
+    .sort((left, right) => left.title.localeCompare(right.title, undefined, { numeric: true }));
+}
+
+function safeMusicPath(fileName) {
+  const musicDir = resolveMusicDir();
+
+  if (!musicDir || fileName.includes("/") || fileName.includes("\\")) {
+    return null;
+  }
+
+  const filePath = resolve(musicDir, fileName);
+
+  return filePath.startsWith(`${musicDir}${sep}`) ? filePath : null;
+}
+
+function streamMusicAudio(fileName, request, response) {
+  let decodedFileName;
+
+  try {
+    decodedFileName = decodeURIComponent(fileName);
+  } catch {
+    return false;
+  }
+
+  const filePath = safeMusicPath(decodedFileName);
+
+  if (!filePath || extname(filePath).toLowerCase() !== ".mp3" || !existsSync(filePath)) {
+    return false;
+  }
+
+  const fileStat = statSync(filePath);
+
+  if (!fileStat.isFile()) {
+    return false;
+  }
+
+  const range = request.headers.range;
+  const headers = {
+    "Accept-Ranges": "bytes",
+    "Cache-Control": "public, max-age=3600",
+    "Content-Type": "audio/mpeg",
+  };
+
+  if (typeof range === "string") {
+    const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+
+    if (match) {
+      const requestedStart = match[1] ? Number(match[1]) : 0;
+      const requestedEnd = match[2] ? Number(match[2]) : fileStat.size - 1;
+      const start = Math.min(Math.max(0, requestedStart), fileStat.size - 1);
+      const end = Math.min(Math.max(start, requestedEnd), fileStat.size - 1);
+
+      response.writeHead(206, {
+        ...headers,
+        "Content-Length": end - start + 1,
+        "Content-Range": `bytes ${start}-${end}/${fileStat.size}`,
+      });
+      createReadStream(filePath, { start, end }).pipe(response);
+      return true;
+    }
+  }
+
+  response.writeHead(200, {
+    ...headers,
+    "Content-Length": fileStat.size,
+  });
+  createReadStream(filePath).pipe(response);
+  return true;
 }
 
 function parseCookies(cookieHeader = "") {
@@ -1620,6 +1736,20 @@ async function handleApi(request, response, pathname) {
     return;
   }
 
+  if (request.method === "GET" && pathname === "/api/music") {
+    jsonResponse(response, 200, { tracks: readMusicTracks() });
+    return;
+  }
+
+  const musicAudioMatch = pathname.match(/^\/api\/music\/audio\/([^/]+)$/);
+
+  if (request.method === "GET" && musicAudioMatch) {
+    if (!streamMusicAudio(musicAudioMatch[1], request, response)) {
+      jsonResponse(response, 404, { error: "Audio not found" });
+    }
+    return;
+  }
+
   if (request.method === "GET" && pathname === "/api/data") {
     jsonResponse(response, 200, readAllData());
     return;
@@ -1678,6 +1808,7 @@ const contentTypes = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
+  ".mp3": "audio/mpeg",
   ".png": "image/png",
   ".svg": "image/svg+xml",
   ".txt": "text/plain; charset=utf-8",

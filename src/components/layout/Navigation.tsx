@@ -19,6 +19,7 @@ import type { Language } from "../../i18n/translations";
 import type { TranslationKey } from "../../i18n/translations";
 import { useI18n } from "../../i18n/I18nContext";
 import type { StorageMode } from "../../data/storage";
+import { MusicPlayer } from "../music/MusicPlayer";
 
 export type PageId =
   | "home"
@@ -212,6 +213,7 @@ export function Navigation({
               </button>
             );
           })}
+          <MusicPlayer enabled={storageMode === "server"} />
         </nav>
       </div>
     </header>

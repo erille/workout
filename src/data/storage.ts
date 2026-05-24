@@ -43,11 +43,20 @@ export type QuickTimerSettings = {
   rounds: number;
 };
 
+export type MusicPlayerSettings = {
+  volume: number;
+  trackId?: string;
+};
+
 export const defaultQuickTimerSettings: QuickTimerSettings = {
   name: "Quick interval",
   workSeconds: 45,
   restSeconds: 15,
   rounds: 8,
+};
+
+const defaultMusicPlayerSettings: MusicPlayerSettings = {
+  volume: 0.7,
 };
 
 const guestStorageKeys = {
@@ -58,6 +67,7 @@ const guestStorageKeys = {
   settings: "workout.guest.settings.v1",
   profile: "workout.guest.profile.v1",
   quickTimer: "workout.guest.quickTimer.v1",
+  musicPlayer: "workout.guest.musicPlayer.v1",
 } as const;
 
 const EXERCISE_DEFAULTS_VERSION = 1;
@@ -374,6 +384,30 @@ export async function getQuickTimerSettings(): Promise<QuickTimerSettings> {
 
 export async function saveQuickTimerSettings(settings: QuickTimerSettings): Promise<void> {
   writeLocalJson(guestStorageKeys.quickTimer, normalizeQuickTimerSettings(settings));
+}
+
+function normalizeMusicPlayerSettings(
+  settings?: Partial<MusicPlayerSettings>,
+): MusicPlayerSettings {
+  const volume = Number(settings?.volume);
+
+  return {
+    volume: Number.isFinite(volume) ? Math.min(1, Math.max(0, volume)) : defaultMusicPlayerSettings.volume,
+    trackId: settings?.trackId?.trim() || undefined,
+  };
+}
+
+export async function getMusicPlayerSettings(): Promise<MusicPlayerSettings> {
+  return normalizeMusicPlayerSettings(
+    readLocalJson<Partial<MusicPlayerSettings>>(
+      guestStorageKeys.musicPlayer,
+      defaultMusicPlayerSettings,
+    ),
+  );
+}
+
+export async function saveMusicPlayerSettings(settings: MusicPlayerSettings): Promise<void> {
+  writeLocalJson(guestStorageKeys.musicPlayer, normalizeMusicPlayerSettings(settings));
 }
 
 export async function exportLocalData(): Promise<LocalDataExport> {

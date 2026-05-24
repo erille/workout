@@ -14,6 +14,7 @@ ENV NODE_ENV=production
 ENV PORT=8060
 ENV WORKOUT_DB_PATH=/data/workout.sqlite
 ENV WORKOUT_TTS_CACHE_DIR=/data/tts-cache
+ENV WORKOUT_MUSIC_DIR=/data/data/mp3
 ENV WORKOUT_PIPER_BINARY=/opt/piper/bin/piper
 ENV WORKOUT_PIPER_MODEL_EN=/opt/piper-voices/en_US-lessac-medium.onnx
 ENV WORKOUT_PIPER_MODEL_FR=/opt/piper-voices/fr_FR-siwis-medium.onnx
@@ -32,7 +33,7 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/node_modules ./node_modules
 COPY server ./server
 COPY package*.json ./
-RUN mkdir -p /data/tts-cache
+RUN mkdir -p /data/tts-cache /data/data/mp3
 VOLUME ["/data"]
 EXPOSE 8060
 CMD ["node", "server/index.js"]

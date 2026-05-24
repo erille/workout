@@ -565,15 +565,14 @@ export function useWorkoutTimer({ plan, settings, onComplete }: UseWorkoutTimerO
       activePhase === "exercise_reps" ||
       activePhase === "exercise_distance"
     ) {
-      recordStepCompletion(current.currentRound, current.currentStepIndex);
-      advanceAfterBreak(current.currentRound, current.currentStepIndex);
+      moveToBreak(current.currentRound, current.currentStepIndex);
       return;
     }
 
     if (activePhase === "break") {
       advanceAfterBreak(current.currentRound, current.currentStepIndex);
     }
-  }, [advanceAfterBreak, recordStepCompletion]);
+  }, [advanceAfterBreak, moveToBreak]);
 
   const updateCurrentStepWeight = useCallback((weight: number | undefined) => {
     const current = stateRef.current;

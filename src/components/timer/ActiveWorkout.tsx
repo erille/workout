@@ -10,7 +10,7 @@ import { useI18n } from "../../i18n/I18nContext";
 import { translateExerciseName } from "../../i18n/exerciseNames";
 import type { Language } from "../../i18n/translations";
 import type { AppSettings } from "../../models/settings";
-import type { WorkoutSession } from "../../models/session";
+import type { WorkoutSession, WorkoutSessionFeedback } from "../../models/session";
 import type { WorkoutPlan, WorkoutStep } from "../../models/workout";
 import { useWorkoutTimer } from "../../hooks/useWorkoutTimer";
 import { formatDateTime, formatSeconds, getElapsedSeconds } from "../../utils/format";
@@ -25,6 +25,16 @@ type ActiveWorkoutProps = {
 };
 
 type TimerMode = "quick" | "plans";
+
+const sessionFeedbackOptions: Array<{
+  value: WorkoutSessionFeedback;
+  emoji: string;
+  labelKey: "sessionFeedback.tired" | "sessionFeedback.ok" | "sessionFeedback.great";
+}> = [
+  { value: "tired", emoji: "😫", labelKey: "sessionFeedback.tired" },
+  { value: "ok", emoji: "😃", labelKey: "sessionFeedback.ok" },
+  { value: "great", emoji: "😍", labelKey: "sessionFeedback.great" },
+];
 
 function formatTimerDisplay(totalSeconds: number): string {
   const seconds = Math.max(0, Math.round(totalSeconds));
@@ -253,9 +263,27 @@ function QuickTimerSetup({ onStart }: { onStart: (plan: WorkoutPlan) => void }) 
   );
 }
 
-function SessionSummary({ session }: { session: WorkoutSession }) {
+function SessionSummary({
+  onFeedbackChange,
+  session,
+}: {
+  onFeedbackChange: (session: WorkoutSession) => void | Promise<void>;
+  session: WorkoutSession;
+}) {
   const { language, t } = useI18n();
   const isComplete = session.completed;
+  const [selectedFeedback, setSelectedFeedback] = useState<WorkoutSessionFeedback>(
+    session.feedback ?? "ok",
+  );
+
+  useEffect(() => {
+    setSelectedFeedback(session.feedback ?? "ok");
+  }, [session.feedback, session.id]);
+
+  const updateFeedback = (feedback: WorkoutSessionFeedback) => {
+    setSelectedFeedback(feedback);
+    void onFeedbackChange({ ...session, feedback });
+  };
 
   return (
     <div className="panel p-4">
@@ -279,6 +307,37 @@ function SessionSummary({ session }: { session: WorkoutSession }) {
           {isComplete ? t("common.saved") : t("history.partial")}
         </span>
       </div>
+
+      {isComplete ? (
+        <div className="mt-4 rounded-lg border border-slate-800 bg-slate-950/70 p-3">
+          <p className="label">{t("timer.feedbackTitle")}</p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            {sessionFeedbackOptions.map((option) => {
+              const isSelected = selectedFeedback === option.value;
+
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`rounded-md border px-3 py-3 text-center transition ${
+                    isSelected
+                      ? "border-cyan-300 bg-cyan-300/15 text-cyan-100 shadow-glow"
+                      : "border-slate-800 bg-slate-950 text-slate-300 hover:border-slate-600"
+                  }`}
+                  aria-pressed={isSelected}
+                  onClick={() => updateFeedback(option.value)}
+                >
+                  <span className="block text-3xl" aria-hidden="true">
+                    {option.emoji}
+                  </span>
+                  <span className="mt-2 block text-sm font-bold">{t(option.labelKey)}</span>
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-xs text-slate-500">{t("timer.feedbackDefault")}</p>
+        </div>
+      ) : null}
 
       <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {session.steps.map((step) => (
@@ -659,7 +718,9 @@ function WorkoutRunner({
         plan={plan}
       />
 
-      {completedSession && saveSession ? <SessionSummary session={completedSession} /> : null}
+      {completedSession && saveSession ? (
+        <SessionSummary onFeedbackChange={onSessionComplete} session={completedSession} />
+      ) : null}
       {completedSession && !saveSession ? (
         <div className="panel p-4">
           <p className="label">{t("common.complete")}</p>

@@ -1,3 +1,5 @@
+export type WorkoutSessionFeedback = "tired" | "ok" | "great";
+
 export type WorkoutSessionStep = {
   id: string;
   exerciseId?: string;
@@ -19,6 +21,7 @@ export type WorkoutSession = {
   startedAt: string;
   completedAt?: string;
   completed: boolean;
+  feedback?: WorkoutSessionFeedback;
   roundsCompleted: number;
   steps: WorkoutSessionStep[];
 };

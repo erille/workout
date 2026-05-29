@@ -153,16 +153,20 @@ export function createWorkoutSession(
   steps: WorkoutSessionStep[],
   options?: {
     completed?: boolean;
+    feedback?: WorkoutSession["feedback"];
     roundsCompleted?: number;
   },
 ): WorkoutSession {
+  const completed = options?.completed ?? true;
+
   return {
     id: createId("session"),
     workoutPlanId: plan.id,
     workoutName: plan.name,
     startedAt,
     completedAt,
-    completed: options?.completed ?? true,
+    completed,
+    feedback: options?.feedback ?? (completed ? "ok" : undefined),
     roundsCompleted: options?.roundsCompleted ?? plan.rounds,
     steps,
   };

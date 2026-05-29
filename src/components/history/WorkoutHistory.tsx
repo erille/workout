@@ -32,7 +32,11 @@ import { type CSSProperties, FormEvent, type ReactNode, useMemo, useState } from
 import { useI18n } from "../../i18n/I18nContext";
 import { translateExerciseName } from "../../i18n/exerciseNames";
 import type { Exercise } from "../../models/exercise";
-import type { WorkoutSession, WorkoutSessionStep } from "../../models/session";
+import type {
+  WorkoutSession,
+  WorkoutSessionFeedback,
+  WorkoutSessionStep,
+} from "../../models/session";
 import type { WorkoutPlan, WorkoutStep } from "../../models/workout";
 import { formatDateTime, formatSeconds, getElapsedSeconds } from "../../utils/format";
 import { createId } from "../../utils/id";
@@ -56,6 +60,22 @@ type ManualStepForm = {
   breakSeconds: number;
   weight: string;
 };
+
+const sessionFeedbackDisplay: Record<
+  WorkoutSessionFeedback,
+  {
+    emoji: string;
+    labelKey: "sessionFeedback.tired" | "sessionFeedback.ok" | "sessionFeedback.great";
+  }
+> = {
+  tired: { emoji: "😫", labelKey: "sessionFeedback.tired" },
+  ok: { emoji: "😃", labelKey: "sessionFeedback.ok" },
+  great: { emoji: "😍", labelKey: "sessionFeedback.great" },
+};
+
+function getSessionFeedback(session: WorkoutSession): WorkoutSessionFeedback | undefined {
+  return session.feedback ?? (session.completed ? "ok" : undefined);
+}
 
 function stepLabel(step: WorkoutSessionStep, repsLabel: string): string {
   const target =
@@ -447,6 +467,7 @@ export function WorkoutHistory({
       startedAt: startedAt.toISOString(),
       completedAt: completedAt.toISOString(),
       completed: existingSession?.completed ?? true,
+      feedback: existingSession?.feedback ?? "ok",
       roundsCompleted,
       steps,
     };
@@ -837,6 +858,8 @@ export function WorkoutHistory({
           {filteredSessions.map((session) => {
             const isExpanded = expandedSessionIds.has(session.id);
             const detailsId = `history-session-details-${session.id}`;
+            const feedback = getSessionFeedback(session);
+            const feedbackDisplay = feedback ? sessionFeedbackDisplay[feedback] : undefined;
 
             return (
               <article key={session.id} className="panel p-4">
@@ -864,6 +887,12 @@ export function WorkoutHistory({
                         {!session.completed ? (
                           <span className="rounded-md bg-amber-300 px-2 py-1 text-xs font-bold text-amber-950">
                             {t("history.partial")}
+                          </span>
+                        ) : null}
+                        {feedbackDisplay ? (
+                          <span className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-950/70 px-2 py-1 text-xs font-bold text-slate-200">
+                            <span aria-hidden="true">{feedbackDisplay.emoji}</span>
+                            {t(feedbackDisplay.labelKey)}
                           </span>
                         ) : null}
                       </span>

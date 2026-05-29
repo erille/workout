@@ -38,6 +38,8 @@ type LiftEntry = {
   exerciseId?: string;
   exerciseName: string;
   estimatedOneRepMaxKg: number;
+  occurredAt: Date;
+  order: number;
   reps: number;
   volumeKg: number;
   weightKg: number;
@@ -59,12 +61,43 @@ type LiftVolumeBucket = {
   volumeKg: number;
 };
 
+type LiftChartBucket = {
+  end: Date;
+  key: string;
+  label: string;
+  start: Date;
+};
+
+type ChartPoint = {
+  key: string;
+  label: string;
+  value: number;
+};
+
+type ExerciseChartSeries = {
+  color: string;
+  key: string;
+  label: string;
+  metaLabel: string;
+  points: ChartPoint[];
+};
+
 const viewModes: Array<{ id: ViewMode; labelKey: "statistics.weeks" | "statistics.month" | "statistics.year" }> = [
   { id: "weeks", labelKey: "statistics.weeks" },
   { id: "month", labelKey: "statistics.month" },
   { id: "year", labelKey: "statistics.year" },
 ];
 const weekDayIndexes = [1, 2, 3, 4, 5, 6, 0];
+const chartSeriesColors = [
+  "#22d3ee",
+  "#34d399",
+  "#f59e0b",
+  "#f472b6",
+  "#a78bfa",
+  "#fb7185",
+  "#60a5fa",
+  "#facc15",
+];
 
 function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -219,14 +252,15 @@ function getLatestBodyWeightKg(profile: CharacterProfile): number | undefined {
 }
 
 function getLiftEntries(sessions: WorkoutSession[]): LiftEntry[] {
-  return sessions.flatMap((session) => {
-    const date = startOfDay(new Date(session.startedAt));
+  return sessions.flatMap((session, sessionIndex) => {
+    const occurredAt = new Date(session.startedAt);
+    const date = startOfDay(occurredAt);
 
-    if (!isValidDate(date)) {
+    if (!isValidDate(date) || !isValidDate(occurredAt)) {
       return [];
     }
 
-    return session.steps.flatMap((step) => {
+    return session.steps.flatMap((step, stepIndex) => {
       if (
         step.type !== "reps" ||
         typeof step.weight !== "number" ||
@@ -243,6 +277,8 @@ function getLiftEntries(sessions: WorkoutSession[]): LiftEntry[] {
           exerciseId: step.exerciseId,
           exerciseName: step.exerciseName,
           estimatedOneRepMaxKg: estimateOneRepMaxKg(step.weight, step.reps),
+          occurredAt,
+          order: sessionIndex * 1000 + stepIndex,
           reps: step.reps,
           volumeKg: step.weight * step.reps,
           weightKg: step.weight,
@@ -298,11 +334,178 @@ function buildLiftYearBuckets(
   });
 }
 
+function buildLiftChartBuckets(
+  viewMode: ViewMode,
+  locale: string,
+  today: Date,
+  selectedMonth: Date,
+  selectedYear: Date,
+): LiftChartBucket[] {
+  if (viewMode === "weeks") {
+    const currentWeekStart = startOfWeek(today);
+
+    return Array.from({ length: 12 }, (_, index) => {
+      const start = addDays(currentWeekStart, (index - 11) * 7);
+
+      return {
+        end: addDays(start, 7),
+        key: toDateKey(start),
+        label: formatWeekLabel(locale, start),
+        start,
+      };
+    });
+  }
+
+  if (viewMode === "month") {
+    const start = monthStart(selectedMonth);
+    const end = addMonths(start, 1);
+    const dayCount = Math.round((end.getTime() - start.getTime()) / 86_400_000);
+
+    return Array.from({ length: dayCount }, (_, index) => {
+      const date = addDays(start, index);
+
+      return {
+        end: addDays(date, 1),
+        key: toDateKey(date),
+        label: new Intl.DateTimeFormat(locale, { day: "numeric", month: "short" }).format(date),
+        start: date,
+      };
+    });
+  }
+
+  const start = yearStart(selectedYear);
+
+  return Array.from({ length: 12 }, (_, index) => {
+    const month = addMonths(start, index);
+
+    return {
+      end: addMonths(month, 1),
+      key: `${month.getFullYear()}-${month.getMonth()}`,
+      label: formatShortMonth(locale, month),
+      start: month,
+    };
+  });
+}
+
+function getLiftRange(
+  viewMode: ViewMode,
+  today: Date,
+  selectedMonth: Date,
+  selectedYear: Date,
+): { end: Date; start: Date } {
+  if (viewMode === "weeks") {
+    const currentWeekStart = startOfWeek(today);
+    return {
+      end: addDays(currentWeekStart, 7),
+      start: addDays(currentWeekStart, -77),
+    };
+  }
+
+  if (viewMode === "month") {
+    const start = monthStart(selectedMonth);
+    return { end: addMonths(start, 1), start };
+  }
+
+  const start = yearStart(selectedYear);
+  return { end: addYears(start, 1), start };
+}
+
+function liftExerciseKey(entry: Pick<LiftEntry, "exerciseId" | "exerciseName">): string {
+  return entry.exerciseId ?? entry.exerciseName.toLowerCase();
+}
+
+function getChartColor(index: number): string {
+  return chartSeriesColors[index % chartSeriesColors.length];
+}
+
+function buildWeightUsedSeries(
+  entries: LiftEntry[],
+  formatSetCount: (count: number) => string,
+  language: "en" | "fr",
+  locale: string,
+): ExerciseChartSeries[] {
+  const groupedEntries = new Map<string, LiftEntry[]>();
+
+  entries.forEach((entry) => {
+    const key = liftExerciseKey(entry);
+    groupedEntries.set(key, [...(groupedEntries.get(key) ?? []), entry]);
+  });
+
+  return [...groupedEntries.entries()]
+    .map(([key, exerciseEntries], index) => {
+      const sortedEntries = [...exerciseEntries].sort(
+        (a, b) => a.occurredAt.getTime() - b.occurredAt.getTime() || a.order - b.order,
+      );
+      const exercise = sortedEntries[0];
+
+      return {
+        color: getChartColor(index),
+        key,
+        label: translateExerciseName(exercise, language),
+        metaLabel: formatSetCount(sortedEntries.length),
+        points: sortedEntries.map((entry, entryIndex) => ({
+          key: `${key}-${entry.occurredAt.toISOString()}-${entry.order}-${entryIndex}`,
+          label: `${new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(
+            entry.occurredAt,
+          )} - ${entry.reps} reps`,
+          value: entry.weightKg,
+        })),
+      };
+    })
+    .sort((a, b) => b.points.length - a.points.length);
+}
+
+function buildVolumeByExerciseSeries(
+  entries: LiftEntry[],
+  buckets: LiftChartBucket[],
+  language: "en" | "fr",
+  locale: string,
+): ExerciseChartSeries[] {
+  const groupedEntries = new Map<string, LiftEntry[]>();
+
+  entries.forEach((entry) => {
+    const key = liftExerciseKey(entry);
+    groupedEntries.set(key, [...(groupedEntries.get(key) ?? []), entry]);
+  });
+
+  return [...groupedEntries.entries()]
+    .map(([key, exerciseEntries], index) => {
+      const exercise = exerciseEntries[0];
+      const points = buckets.map((bucket) => {
+        const volume = getLiftEntriesInRange(exerciseEntries, bucket.start, bucket.end).reduce(
+          (total, entry) => total + entry.volumeKg,
+          0,
+        );
+
+        return {
+          key: `${key}-${bucket.key}`,
+          label: bucket.label,
+          value: volume,
+        };
+      });
+      const totalVolume = points.reduce((total, point) => total + point.value, 0);
+
+      return {
+        color: getChartColor(index),
+        key,
+        label: translateExerciseName(exercise, language),
+        metaLabel: formatKg(locale, totalVolume),
+        points,
+      };
+    })
+    .filter((series) => series.points.some((point) => point.value > 0))
+    .sort(
+      (a, b) =>
+        b.points.reduce((total, point) => total + point.value, 0) -
+        a.points.reduce((total, point) => total + point.value, 0),
+    );
+}
+
 function getTopLiftExercises(entries: LiftEntry[]): LiftExerciseSummary[] {
   const summaries = new Map<string, LiftExerciseSummary>();
 
   entries.forEach((entry) => {
-    const key = entry.exerciseId ?? entry.exerciseName.toLowerCase();
+    const key = liftExerciseKey(entry);
     const current = summaries.get(key) ?? {
       bestEstimatedOneRepMaxKg: 0,
       exerciseId: entry.exerciseId,
@@ -440,6 +643,165 @@ function VolumeBarList({
           </p>
         </div>
       ))}
+    </div>
+  );
+}
+
+function maxChartValue(series: ExerciseChartSeries[]): number {
+  return Math.max(1, ...series.flatMap((item) => item.points.map((point) => point.value)));
+}
+
+function ExerciseLineChart({
+  emptyLabel,
+  onSelectSeries,
+  selectedSeriesKey,
+  series,
+  valueFormatter,
+  valueLabel,
+}: {
+  emptyLabel: string;
+  onSelectSeries: (seriesKey: string | null) => void;
+  selectedSeriesKey: string | null;
+  series: ExerciseChartSeries[];
+  valueFormatter: (value: number) => string;
+  valueLabel: string;
+}) {
+  const width = 760;
+  const height = 300;
+  const padding = 38;
+  const selectedSeries = selectedSeriesKey
+    ? series.filter((item) => item.key === selectedSeriesKey)
+    : [];
+  const visibleSeries = selectedSeriesKey && selectedSeries.length > 0 ? selectedSeries : series;
+  const maxPoints = Math.max(1, ...visibleSeries.map((item) => item.points.length));
+  const topValue = maxChartValue(visibleSeries);
+  const usableWidth = width - padding * 2;
+  const usableHeight = height - padding * 2;
+
+  if (series.length === 0 || visibleSeries.length === 0) {
+    return (
+      <p className="rounded-md border border-dashed border-slate-700 p-3 text-sm text-slate-400">
+        {emptyLabel}
+      </p>
+    );
+  }
+
+  const pointPosition = (point: ChartPoint, pointIndex: number) => {
+    const x =
+      maxPoints === 1
+        ? width / 2
+        : padding + (pointIndex / Math.max(1, maxPoints - 1)) * usableWidth;
+    const y = padding + usableHeight - (point.value / topValue) * usableHeight;
+
+    return { ...point, x, y };
+  };
+  const shouldShowPointLabels = visibleSeries.length === 1 && visibleSeries[0].points.length <= 16;
+
+  return (
+    <div className="space-y-3">
+      <div className="overflow-x-auto rounded-md border border-slate-800 bg-slate-950/70 p-3">
+        <svg className="min-w-[42rem]" viewBox={`0 0 ${width} ${height}`} role="img">
+          <line
+            x1={padding}
+            x2={padding}
+            y1={padding}
+            y2={height - padding}
+            stroke="#334155"
+            strokeWidth="1"
+          />
+          <line
+            x1={padding}
+            x2={width - padding}
+            y1={height - padding}
+            y2={height - padding}
+            stroke="#334155"
+            strokeWidth="1"
+          />
+          {[0.25, 0.5, 0.75].map((ratio) => (
+            <line
+              key={ratio}
+              x1={padding}
+              x2={width - padding}
+              y1={padding + usableHeight * ratio}
+              y2={padding + usableHeight * ratio}
+              stroke="#1e293b"
+              strokeWidth="1"
+            />
+          ))}
+          <text x={padding} y={18} fill="#94a3b8" fontSize="11" fontWeight="700">
+            {valueLabel}
+          </text>
+          {visibleSeries.map((line) => {
+            const positionedPoints = line.points.map(pointPosition);
+            const polylinePoints = positionedPoints.map((point) => `${point.x},${point.y}`).join(" ");
+
+            return (
+              <g key={line.key}>
+                {positionedPoints.length > 1 ? (
+                  <polyline
+                    fill="none"
+                    points={polylinePoints}
+                    stroke={line.color}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="3"
+                  />
+                ) : null}
+                {positionedPoints.map((point) => (
+                  <g key={point.key}>
+                    <title>
+                      {line.label} - {point.label} - {valueFormatter(point.value)}
+                    </title>
+                    <circle cx={point.x} cy={point.y} fill={line.color} r="4.5" />
+                    {shouldShowPointLabels && point.value > 0 ? (
+                      <text
+                        x={point.x}
+                        y={Math.max(14, point.y - 10)}
+                        fill="#e2e8f0"
+                        fontSize="11"
+                        fontWeight="700"
+                        textAnchor="middle"
+                      >
+                        {valueFormatter(point.value)}
+                      </text>
+                    ) : null}
+                  </g>
+                ))}
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {series.map((item) => {
+          const isSelected = selectedSeriesKey === item.key;
+          const isDimmed = selectedSeriesKey !== null && !isSelected;
+
+          return (
+            <button
+              key={item.key}
+              type="button"
+              className={`inline-flex items-center gap-2 rounded-md border px-2 py-1 text-xs font-bold uppercase tracking-wide transition ${
+                isSelected
+                  ? "border-cyan-300 bg-cyan-300/15 text-cyan-100"
+                  : isDimmed
+                    ? "border-slate-800 bg-slate-950/30 text-slate-500"
+                    : "border-slate-800 bg-slate-950/70 text-slate-200 hover:border-slate-600"
+              }`}
+              aria-pressed={isSelected}
+              onClick={() => onSelectSeries(isSelected ? null : item.key)}
+            >
+              <span
+                className="h-2.5 w-2.5 rounded-full"
+                style={{ backgroundColor: item.color, opacity: isDimmed ? 0.35 : 1 }}
+              />
+              {item.label}
+              <span className="text-slate-500">{item.metaLabel}</span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -585,7 +947,10 @@ function ExerciseTrendPanel({
 export function StatisticsPage({ profile, sessions }: StatisticsPageProps) {
   const { language, t } = useI18n();
   const [viewMode, setViewMode] = useState<ViewMode>("weeks");
+  const [liftViewMode, setLiftViewMode] = useState<ViewMode>("weeks");
   const [selectedLiftExerciseKey, setSelectedLiftExerciseKey] = useState<string | null>(null);
+  const [selectedVolumeSeriesKey, setSelectedVolumeSeriesKey] = useState<string | null>(null);
+  const [selectedWeightSeriesKey, setSelectedWeightSeriesKey] = useState<string | null>(null);
   const [selectedMonth, setSelectedMonth] = useState(() => monthStart(new Date()));
   const [selectedYear, setSelectedYear] = useState(() => yearStart(new Date()));
   const locale = language === "fr" ? "fr-FR" : "en-US";
@@ -605,6 +970,36 @@ export function StatisticsPage({ profile, sessions }: StatisticsPageProps) {
     [locale, selectedYear, sessionDates],
   );
   const liftEntries = useMemo(() => getLiftEntries(sessions), [sessions]);
+  const liftRange = useMemo(
+    () => getLiftRange(liftViewMode, today, selectedMonth, selectedYear),
+    [liftViewMode, selectedMonth, selectedYear, today],
+  );
+  const liftChartEntries = useMemo(
+    () => getLiftEntriesInRange(liftEntries, liftRange.start, liftRange.end),
+    [liftEntries, liftRange],
+  );
+  const liftChartBuckets = useMemo(
+    () => buildLiftChartBuckets(liftViewMode, locale, today, selectedMonth, selectedYear),
+    [liftViewMode, locale, selectedMonth, selectedYear, today],
+  );
+  const weightUsedSeries = useMemo(
+    () =>
+      buildWeightUsedSeries(
+        liftChartEntries,
+        (count) =>
+          t("statistics.setCount", {
+            count,
+            plural: count === 1 ? "" : "s",
+          }),
+        language,
+        locale,
+      ),
+    [language, liftChartEntries, locale, t],
+  );
+  const volumeByExerciseSeries = useMemo(
+    () => buildVolumeByExerciseSeries(liftChartEntries, liftChartBuckets, language, locale),
+    [language, liftChartBuckets, liftChartEntries, locale],
+  );
   const liftYearBuckets = useMemo(
     () => buildLiftYearBuckets(liftEntries, locale, selectedYear),
     [liftEntries, locale, selectedYear],
@@ -853,9 +1248,64 @@ export function StatisticsPage({ profile, sessions }: StatisticsPageProps) {
             <h3 className="text-xl font-bold text-slate-50">{t("statistics.liftingTitle")}</h3>
             <p className="mt-1 max-w-3xl text-sm text-slate-400">{t("statistics.liftingDescription")}</p>
           </div>
-          <span className="rounded-md border border-emerald-300/40 bg-emerald-300/10 px-3 py-1 text-sm font-bold text-emerald-100">
-            {t("statistics.liftingExample")}
-          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex w-fit rounded-md border border-slate-800 bg-slate-950/70 p-1">
+              {viewModes.map((mode) => (
+                <button
+                  key={mode.id}
+                  type="button"
+                  className={`rounded px-3 py-2 text-sm font-bold transition ${
+                    liftViewMode === mode.id
+                      ? "bg-cyan-400 text-slate-950"
+                      : "text-slate-300 hover:bg-slate-800"
+                  }`}
+                  onClick={() => setLiftViewMode(mode.id)}
+                >
+                  {t(mode.labelKey)}
+                </button>
+              ))}
+            </div>
+            {liftViewMode === "month" ? (
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="secondary-button px-3"
+                  aria-label={t("statistics.previousMonth")}
+                  onClick={() => setSelectedMonth((current) => addMonths(current, -1))}
+                >
+                  <ChevronLeft aria-hidden="true" size={17} />
+                </button>
+                <button
+                  type="button"
+                  className="secondary-button px-3"
+                  aria-label={t("statistics.nextMonth")}
+                  onClick={() => setSelectedMonth((current) => addMonths(current, 1))}
+                >
+                  <ChevronRight aria-hidden="true" size={17} />
+                </button>
+              </div>
+            ) : null}
+            {liftViewMode === "year" ? (
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="secondary-button px-3"
+                  aria-label={t("statistics.previousYear")}
+                  onClick={() => setSelectedYear((current) => addYears(current, -1))}
+                >
+                  <ChevronLeft aria-hidden="true" size={17} />
+                </button>
+                <button
+                  type="button"
+                  className="secondary-button px-3"
+                  aria-label={t("statistics.nextYear")}
+                  onClick={() => setSelectedYear((current) => addYears(current, 1))}
+                >
+                  <ChevronRight aria-hidden="true" size={17} />
+                </button>
+              </div>
+            ) : null}
+          </div>
         </div>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -886,16 +1336,59 @@ export function StatisticsPage({ profile, sessions }: StatisticsPageProps) {
             {t("statistics.noLiftingData")}
           </div>
         ) : (
-          <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
-            <div className="rounded-md border border-slate-800 bg-slate-950/60 p-4">
-              <div className="mb-4">
-                <p className="label">{t("statistics.liftVolumeByMonth")}</p>
-                <h4 className="text-lg font-bold text-slate-50">{selectedYearNumber}</h4>
+          <>
+            <div className="mt-5 grid gap-4 xl:grid-cols-2">
+              <div className="rounded-md border border-slate-800 bg-slate-950/60 p-4">
+                <div className="mb-4">
+                  <p className="label">{t("statistics.weightUsedChart")}</p>
+                  <h4 className="text-lg font-bold text-slate-50">
+                    {t("statistics.weightUsedByExercise")}
+                  </h4>
+                  <p className="mt-1 text-sm text-slate-400">
+                    {t("statistics.weightUsedDescription")}
+                  </p>
+                </div>
+                <ExerciseLineChart
+                  emptyLabel={t("statistics.noWeightChartData")}
+                  onSelectSeries={setSelectedWeightSeriesKey}
+                  selectedSeriesKey={selectedWeightSeriesKey}
+                  series={weightUsedSeries}
+                  valueFormatter={(value) => formatKg(locale, value, 1)}
+                  valueLabel={t("statistics.weightAxis")}
+                />
               </div>
-              <VolumeBarList buckets={liftYearBuckets} locale={locale} />
+
+              <div className="rounded-md border border-slate-800 bg-slate-950/60 p-4">
+                <div className="mb-4">
+                  <p className="label">{t("statistics.weightedVolumeChart")}</p>
+                  <h4 className="text-lg font-bold text-slate-50">
+                    {t("statistics.weightedVolumeByExercise")}
+                  </h4>
+                  <p className="mt-1 text-sm text-slate-400">
+                    {t("statistics.weightedVolumeDescription")}
+                  </p>
+                </div>
+                <ExerciseLineChart
+                  emptyLabel={t("statistics.noVolumeChartData")}
+                  onSelectSeries={setSelectedVolumeSeriesKey}
+                  selectedSeriesKey={selectedVolumeSeriesKey}
+                  series={volumeByExerciseSeries}
+                  valueFormatter={(value) => formatKg(locale, value)}
+                  valueLabel={t("statistics.volumeAxis")}
+                />
+              </div>
             </div>
 
-            <aside className="space-y-4">
+            <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
+              <div className="rounded-md border border-slate-800 bg-slate-950/60 p-4">
+                <div className="mb-4">
+                  <p className="label">{t("statistics.liftVolumeByMonth")}</p>
+                  <h4 className="text-lg font-bold text-slate-50">{selectedYearNumber}</h4>
+                </div>
+                <VolumeBarList buckets={liftYearBuckets} locale={locale} />
+              </div>
+
+              <aside className="space-y-4">
               <div className="rounded-md border border-slate-800 bg-slate-950/60 p-4">
                 <p className="label">{t("statistics.topLiftExercises")}</p>
                 <div className="mt-3 space-y-3">
@@ -944,8 +1437,9 @@ export function StatisticsPage({ profile, sessions }: StatisticsPageProps) {
                   })}
                 </p>
               </div>
-            </aside>
-          </div>
+              </aside>
+            </div>
+          </>
         )}
 
         {selectedLiftExercise && selectedLiftEntries.length > 0 ? (

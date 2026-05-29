@@ -22,6 +22,8 @@ export type BodyMeasurement = {
   bicepsCm?: number;
   thighCm?: number;
   hipCm?: number;
+  shouldersCm?: number;
+  navelCm?: number;
   bodyFatPercent?: number;
   notes?: string;
 };

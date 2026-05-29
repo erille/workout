@@ -1,4 +1,4 @@
-import { Edit3, ImageUp, LineChart, List, Save, Trash2, UserRound, X } from "lucide-react";
+import { Edit3, ImageUp, Plus, Save, Trash2, UserRound, X } from "lucide-react";
 import {
   type ChangeEvent,
   type FormEvent,
@@ -31,6 +31,8 @@ type MeasurementDraft = {
   bicepsCm: string;
   thighCm: string;
   hipCm: string;
+  shouldersCm: string;
+  navelCm: string;
   notes: string;
 };
 
@@ -42,9 +44,9 @@ type MeasurementMetricKey =
   | "chestCm"
   | "bicepsCm"
   | "thighCm"
-  | "hipCm";
-
-type TimelineView = "history" | "graph";
+  | "hipCm"
+  | "shouldersCm"
+  | "navelCm";
 
 type GraphPoint = {
   dateLabel: string;
@@ -110,6 +112,26 @@ const metricDefinitions = [
   { key: "bicepsCm", labelKey: "character.bicepsCm", suffix: " cm", color: "#a78bfa" },
   { key: "thighCm", labelKey: "character.thighCm", suffix: " cm", color: "#fb7185" },
   { key: "hipCm", labelKey: "character.hipCm", suffix: " cm", color: "#60a5fa" },
+  { key: "shouldersCm", labelKey: "character.shouldersCm", suffix: " cm", color: "#2dd4bf" },
+  { key: "navelCm", labelKey: "character.navelCm", suffix: " cm", color: "#facc15" },
+] as const;
+
+type MeasurementMetricDefinition = (typeof metricDefinitions)[number];
+
+const compositionMetricDefinitions = [
+  metricDefinitions[0],
+  metricDefinitions[1],
+  metricDefinitions[2],
+] as const;
+
+const bodySizeMetricDefinitions = [
+  metricDefinitions[3],
+  metricDefinitions[4],
+  metricDefinitions[5],
+  metricDefinitions[6],
+  metricDefinitions[7],
+  metricDefinitions[8],
+  metricDefinitions[9],
 ] as const;
 
 function todayInputValue(): string {
@@ -217,6 +239,8 @@ function createEmptyMeasurementDraft(): MeasurementDraft {
     bicepsCm: "",
     thighCm: "",
     hipCm: "",
+    shouldersCm: "",
+    navelCm: "",
     notes: "",
   };
 }
@@ -236,6 +260,8 @@ function createMeasurementDraftFromMeasurement(measurement: BodyMeasurement): Me
     bicepsCm: stringifyMeasurementValue(measurement.bicepsCm),
     thighCm: stringifyMeasurementValue(measurement.thighCm),
     hipCm: stringifyMeasurementValue(measurement.hipCm),
+    shouldersCm: stringifyMeasurementValue(measurement.shouldersCm),
+    navelCm: stringifyMeasurementValue(measurement.navelCm),
     notes: measurement.notes ?? "",
   };
 }
@@ -247,14 +273,19 @@ function measurementTime(measurement: BodyMeasurement): number {
 }
 
 function MeasurementGraph({
+  definitions,
   measurements,
   noDataLabel,
   metricLabels,
 }: {
+  definitions: ReadonlyArray<MeasurementMetricDefinition>;
   measurements: BodyMeasurement[];
   noDataLabel: string;
   metricLabels: Record<MeasurementMetricKey, string>;
 }) {
+  const [visibleMetricKeys, setVisibleMetricKeys] = useState<Set<MeasurementMetricKey>>(
+    () => new Set(definitions.map((definition) => definition.key)),
+  );
   const [tooltip, setTooltip] = useState<GraphTooltip | null>(null);
   const width = 720;
   const height = 300;
@@ -268,7 +299,8 @@ function MeasurementGraph({
   const usableWidth = width - padding * 2;
   const usableHeight = height - padding * 2;
   const timeRange = maxTime - minTime || 1;
-  const series = metricDefinitions
+  const series = definitions
+    .filter((definition) => visibleMetricKeys.has(definition.key))
     .map((definition) => {
       const values = datedMeasurements
         .map((measurement) => ({
@@ -302,6 +334,53 @@ function MeasurementGraph({
     })
     .filter((item): item is NonNullable<typeof item> => item !== null);
 
+  const toggleMetric = (key: MeasurementMetricKey) => {
+    setVisibleMetricKeys((current) => {
+      if (current.has(key) && current.size === 1) {
+        return current;
+      }
+
+      const next = new Set(current);
+
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+
+      return next;
+    });
+    setTooltip(null);
+  };
+
+  const legend = (
+    <div className="flex flex-wrap gap-2">
+      {definitions.map((definition) => {
+        const isVisible = visibleMetricKeys.has(definition.key);
+
+        return (
+          <button
+            key={definition.key}
+            type="button"
+            className={`inline-flex items-center gap-2 rounded-md border px-2 py-1 text-xs font-bold uppercase tracking-wide transition ${
+              isVisible
+                ? "border-slate-800 bg-slate-950/70 text-slate-200"
+                : "border-slate-800 bg-slate-950/30 text-slate-500"
+            }`}
+            aria-pressed={isVisible}
+            onClick={() => toggleMetric(definition.key)}
+          >
+            <span
+              className="h-2.5 w-2.5 rounded-full"
+              style={{ backgroundColor: definition.color, opacity: isVisible ? 1 : 0.35 }}
+            />
+            {metricLabels[definition.key]}
+          </button>
+        );
+      })}
+    </div>
+  );
+
   const showTooltip = (
     event: ReactMouseEvent<SVGElement>,
     line: (typeof series)[number],
@@ -331,9 +410,12 @@ function MeasurementGraph({
 
   if (series.length === 0) {
     return (
-      <p className="rounded-md border border-dashed border-slate-700 p-3 text-sm text-slate-400">
-        {noDataLabel}
-      </p>
+      <div className="space-y-3">
+        <p className="rounded-md border border-dashed border-slate-700 p-3 text-sm text-slate-400">
+          {noDataLabel}
+        </p>
+        {legend}
+      </div>
     );
   }
 
@@ -445,20 +527,7 @@ function MeasurementGraph({
           ) : null}
         </svg>
       </div>
-      <div className="flex flex-wrap gap-2">
-        {series.map((line) => (
-          <span
-            key={line.key}
-            className="inline-flex items-center gap-2 rounded-md border border-slate-800 bg-slate-950/70 px-2 py-1 text-xs font-bold uppercase tracking-wide text-slate-200"
-          >
-            <span
-              className="h-2.5 w-2.5 rounded-full"
-              style={{ backgroundColor: line.color }}
-            />
-            {line.label}
-          </span>
-        ))}
-      </div>
+      {legend}
     </div>
   );
 }
@@ -502,14 +571,13 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
   );
   const [measurementDraft, setMeasurementDraft] = useState<MeasurementDraft>(createEmptyMeasurementDraft);
   const [editingMeasurementId, setEditingMeasurementId] = useState<string | null>(null);
-  const [timelineView, setTimelineView] = useState<TimelineView>("history");
   const [profileMessage, setProfileMessage] = useState<string | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [measurementMessage, setMeasurementMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isAvatarMenuOpen, setIsAvatarMenuOpen] = useState(false);
+  const [isMeasurementModalOpen, setIsMeasurementModalOpen] = useState(false);
   const avatarMenuRef = useRef<HTMLDivElement>(null);
-  const measurementFormRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     setDraft(profile);
@@ -662,6 +730,22 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
     setProfileMessage(t("character.profileSaved"));
   };
 
+  const openMeasurementModal = () => {
+    setEditingMeasurementId(null);
+    setMeasurementDraft(createEmptyMeasurementDraft());
+    setMeasurementMessage(null);
+    setError(null);
+    setIsMeasurementModalOpen(true);
+  };
+
+  const closeMeasurementModal = () => {
+    setEditingMeasurementId(null);
+    setMeasurementDraft(createEmptyMeasurementDraft());
+    setMeasurementMessage(null);
+    setError(null);
+    setIsMeasurementModalOpen(false);
+  };
+
   const saveMeasurement = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
@@ -698,6 +782,7 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
     setMeasurementDraft(createEmptyMeasurementDraft());
     setEditingMeasurementId(null);
     await onSaveProfile(nextProfile);
+    setIsMeasurementModalOpen(false);
     setMeasurementMessage(
       editingMeasurementId ? t("character.measurementUpdated") : t("character.measurementSaved"),
     );
@@ -708,17 +793,7 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
     setMeasurementDraft(createMeasurementDraftFromMeasurement(measurement));
     setMeasurementMessage(null);
     setError(null);
-    requestAnimationFrame(() => {
-      measurementFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      measurementFormRef.current?.focus({ preventScroll: true });
-    });
-  };
-
-  const cancelMeasurementEdit = () => {
-    setEditingMeasurementId(null);
-    setMeasurementDraft(createEmptyMeasurementDraft());
-    setMeasurementMessage(null);
-    setError(null);
+    setIsMeasurementModalOpen(true);
   };
 
   const deleteMeasurement = async (measurementId: string) => {
@@ -728,7 +803,7 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
     };
     setDraft(nextProfile);
     if (editingMeasurementId === measurementId) {
-      cancelMeasurementEdit();
+      closeMeasurementModal();
     }
     await onSaveProfile(nextProfile);
   };
@@ -890,6 +965,18 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
         </aside>
 
         <div className="space-y-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+            {measurementMessage ? (
+              <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100">
+                {measurementMessage}
+              </div>
+            ) : null}
+            <button type="button" className="primary-button" onClick={openMeasurementModal}>
+              <Plus aria-hidden="true" size={17} />
+              {t("character.addMeasurement")}
+            </button>
+          </div>
+
           <div className="panel p-4">
             <div>
               <p className="label">{t("character.latest")}</p>
@@ -918,17 +1005,135 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
             </div>
           </div>
 
-          <form
-            ref={measurementFormRef}
-            className="panel scroll-mt-4 space-y-4 p-4 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-offset-2 focus:ring-offset-slate-950"
-            tabIndex={-1}
-            onSubmit={saveMeasurement}
-          >
+          <div className="panel p-4">
+            <div>
+              <p className="label">{t("character.timeline")}</p>
+              <h3 className="text-xl font-bold text-slate-50">
+                {t("character.measurementHistory")}
+              </h3>
+            </div>
+            {sortedMeasurements.length === 0 ? (
+              <p className="mt-4 rounded-md border border-dashed border-slate-700 p-3 text-sm text-slate-400">
+                {t("character.noMeasurements")}
+              </p>
+            ) : (
+              <div className="mt-4 h-80 space-y-2 overflow-y-auto pr-1">
+                {sortedMeasurements.map((measurement) => (
+                  <div
+                    key={measurement.id}
+                    className="rounded-md border border-slate-800 bg-slate-950/70 p-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 space-y-2">
+                        <p className="font-bold text-slate-50">
+                          {new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
+                            new Date(measurement.measuredAt),
+                          )}
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {metricDefinitions
+                            .filter((definition) => typeof measurement[definition.key] === "number")
+                            .map((definition) => (
+                              <span
+                                key={definition.key}
+                                className="rounded-md border border-slate-800 bg-slate-900/60 px-2 py-1 text-xs font-bold text-slate-100"
+                              >
+                                <span className="text-slate-400">{t(definition.labelKey)}: </span>
+                                {formatMetric(measurement[definition.key], definition.suffix)}
+                              </span>
+                            ))}
+                        </div>
+                        {measurement.notes ? (
+                          <p className="line-clamp-2 text-sm text-slate-300">{measurement.notes}</p>
+                        ) : null}
+                      </div>
+                      <div className="flex shrink-0 items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          className="secondary-button h-9 w-9 px-0"
+                          aria-label={t("common.edit")}
+                          title={t("common.edit")}
+                          onClick={() => editMeasurement(measurement)}
+                        >
+                          <Edit3 aria-hidden="true" size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          className="danger-button h-9 w-9 px-0"
+                          aria-label={t("common.delete")}
+                          title={t("common.delete")}
+                          onClick={() => void deleteMeasurement(measurement.id)}
+                        >
+                          <Trash2 aria-hidden="true" size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="panel p-4">
             <div>
               <p className="label">{t("character.progress")}</p>
               <h3 className="text-xl font-bold text-slate-50">
-                {editingMeasurementId ? t("character.editMeasurement") : t("character.addMeasurement")}
+                {t("character.bodyCompositionGraph")}
               </h3>
+            </div>
+            <div className="mt-4">
+              <MeasurementGraph
+                definitions={compositionMetricDefinitions}
+                measurements={chronologicalMeasurements}
+                metricLabels={metricLabels}
+                noDataLabel={t("character.noGraphData")}
+              />
+            </div>
+          </div>
+
+          <div className="panel p-4">
+            <div>
+              <p className="label">{t("character.progress")}</p>
+              <h3 className="text-xl font-bold text-slate-50">
+                {t("character.bodySizeGraph")}
+              </h3>
+            </div>
+            <div className="mt-4">
+              <MeasurementGraph
+                definitions={bodySizeMetricDefinitions}
+                measurements={chronologicalMeasurements}
+                metricLabels={metricLabels}
+                noDataLabel={t("character.noGraphData")}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {isMeasurementModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/80 px-4 py-8 backdrop-blur-sm">
+          <form
+            className="w-full max-w-4xl space-y-4 rounded-lg border border-slate-700 bg-slate-900 p-4 shadow-2xl"
+            onSubmit={saveMeasurement}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="label">{t("character.progress")}</p>
+                <h3 className="text-xl font-bold text-slate-50">
+                  {editingMeasurementId
+                    ? t("character.editMeasurement")
+                    : t("character.addMeasurement")}
+                </h3>
+              </div>
+              <button
+                type="button"
+                className="secondary-button h-9 w-9 px-0"
+                aria-label={t("common.cancel")}
+                title={t("common.cancel")}
+                onClick={closeMeasurementModal}
+              >
+                <X aria-hidden="true" size={17} />
+              </button>
             </div>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <label className="space-y-2">
@@ -980,131 +1185,19 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
                 {error}
               </div>
             ) : null}
-            {measurementMessage ? (
-              <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100">
-                {measurementMessage}
-              </div>
-            ) : null}
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap justify-end gap-2">
+              <button type="button" className="secondary-button" onClick={closeMeasurementModal}>
+                <X aria-hidden="true" size={17} />
+                {t("common.cancel")}
+              </button>
               <button type="submit" className="primary-button">
                 <Save aria-hidden="true" size={17} />
                 {editingMeasurementId ? t("history.editSave") : t("character.saveMeasurement")}
               </button>
-              {editingMeasurementId ? (
-                <button type="button" className="secondary-button" onClick={cancelMeasurementEdit}>
-                  <X aria-hidden="true" size={17} />
-                  {t("character.cancelMeasurementEdit")}
-                </button>
-              ) : null}
             </div>
           </form>
-
-          <div className="panel p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <p className="label">{t("character.timeline")}</p>
-                <h3 className="text-xl font-bold text-slate-50">
-                  {t("character.measurementHistory")}
-                </h3>
-              </div>
-              <div className="flex w-fit rounded-md border border-slate-800 bg-slate-950/70 p-1">
-                <button
-                  type="button"
-                  className={`inline-flex items-center gap-2 rounded px-3 py-2 text-sm font-bold transition ${
-                    timelineView === "history"
-                      ? "bg-cyan-400 text-slate-950"
-                      : "text-slate-300 hover:bg-slate-800"
-                  }`}
-                  onClick={() => setTimelineView("history")}
-                >
-                  <List aria-hidden="true" size={16} />
-                  {t("character.timelineHistory")}
-                </button>
-                <button
-                  type="button"
-                  className={`inline-flex items-center gap-2 rounded px-3 py-2 text-sm font-bold transition ${
-                    timelineView === "graph"
-                      ? "bg-cyan-400 text-slate-950"
-                      : "text-slate-300 hover:bg-slate-800"
-                  }`}
-                  onClick={() => setTimelineView("graph")}
-                >
-                  <LineChart aria-hidden="true" size={16} />
-                  {t("character.timelineGraph")}
-                </button>
-              </div>
-            </div>
-            {sortedMeasurements.length === 0 ? (
-              <p className="mt-4 rounded-md border border-dashed border-slate-700 p-3 text-sm text-slate-400">
-                {t("character.noMeasurements")}
-              </p>
-            ) : timelineView === "graph" ? (
-              <div className="mt-4">
-                <MeasurementGraph
-                  measurements={chronologicalMeasurements}
-                  metricLabels={metricLabels}
-                  noDataLabel={t("character.noGraphData")}
-                />
-              </div>
-            ) : (
-              <div className="mt-4 space-y-2">
-                {sortedMeasurements.map((measurement) => (
-                  <div
-                    key={measurement.id}
-                    className="rounded-md border border-slate-800 bg-slate-950/70 p-3"
-                  >
-                    <div className="space-y-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <p className="font-bold text-slate-50">
-                          {new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
-                            new Date(measurement.measuredAt),
-                          )}
-                        </p>
-                        <div className="flex shrink-0 items-center justify-end gap-2">
-                          <button
-                            type="button"
-                            className="secondary-button h-9 w-9 px-0"
-                            aria-label={t("common.edit")}
-                            title={t("common.edit")}
-                            onClick={() => editMeasurement(measurement)}
-                          >
-                            <Edit3 aria-hidden="true" size={16} />
-                          </button>
-                          <button
-                            type="button"
-                            className="danger-button h-9 w-9 px-0"
-                            aria-label={t("common.delete")}
-                            title={t("common.delete")}
-                            onClick={() => void deleteMeasurement(measurement.id)}
-                          >
-                            <Trash2 aria-hidden="true" size={16} />
-                          </button>
-                        </div>
-                      </div>
-                      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                        {metricDefinitions.map((definition) => (
-                          <div
-                            key={definition.key}
-                            className="rounded-md border border-slate-800 bg-slate-900/60 p-2"
-                          >
-                            <p className="label">{t(definition.labelKey)}</p>
-                            <p className="mt-1 text-sm font-bold text-slate-100">
-                              {formatMetric(measurement[definition.key], definition.suffix)}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                      {measurement.notes ? (
-                        <p className="text-sm text-slate-300">{measurement.notes}</p>
-                      ) : null}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
-      </div>
+      ) : null}
     </section>
   );
 }

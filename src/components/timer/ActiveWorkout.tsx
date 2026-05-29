@@ -263,27 +263,50 @@ function QuickTimerSetup({ onStart }: { onStart: (plan: WorkoutPlan) => void }) 
   );
 }
 
-function SessionSummary({
-  onFeedbackChange,
-  session,
+function SessionFeedbackPicker({
+  onSelect,
+  selectedFeedback,
 }: {
-  onFeedbackChange: (session: WorkoutSession) => void | Promise<void>;
-  session: WorkoutSession;
+  onSelect: (feedback: WorkoutSessionFeedback) => void;
+  selectedFeedback: WorkoutSessionFeedback;
 }) {
+  const { t } = useI18n();
+
+  return (
+    <div className="mx-auto w-full max-w-xl space-y-3">
+      <p className="label text-center">{t("timer.feedbackTitle")}</p>
+      <div className="grid grid-cols-3 gap-2">
+        {sessionFeedbackOptions.map((option) => {
+          const isSelected = selectedFeedback === option.value;
+
+          return (
+            <button
+              key={option.value}
+              type="button"
+              className={`rounded-md border px-2 py-3 text-center transition ${
+                isSelected
+                  ? "border-cyan-300 bg-cyan-300/15 text-cyan-100 shadow-glow"
+                  : "border-slate-800 bg-slate-950 text-slate-300 hover:border-slate-600"
+              }`}
+              aria-pressed={isSelected}
+              onClick={() => onSelect(option.value)}
+            >
+              <span className="block text-3xl sm:text-4xl" aria-hidden="true">
+                {option.emoji}
+              </span>
+              <span className="mt-2 block text-xs font-bold sm:text-sm">{t(option.labelKey)}</span>
+            </button>
+          );
+        })}
+      </div>
+      <p className="text-center text-xs text-slate-500">{t("timer.feedbackDefault")}</p>
+    </div>
+  );
+}
+
+function SessionSummary({ session }: { session: WorkoutSession }) {
   const { language, t } = useI18n();
   const isComplete = session.completed;
-  const [selectedFeedback, setSelectedFeedback] = useState<WorkoutSessionFeedback>(
-    session.feedback ?? "ok",
-  );
-
-  useEffect(() => {
-    setSelectedFeedback(session.feedback ?? "ok");
-  }, [session.feedback, session.id]);
-
-  const updateFeedback = (feedback: WorkoutSessionFeedback) => {
-    setSelectedFeedback(feedback);
-    void onFeedbackChange({ ...session, feedback });
-  };
 
   return (
     <div className="panel p-4">
@@ -307,38 +330,6 @@ function SessionSummary({
           {isComplete ? t("common.saved") : t("history.partial")}
         </span>
       </div>
-
-      {isComplete ? (
-        <div className="mt-4 rounded-lg border border-slate-800 bg-slate-950/70 p-3">
-          <p className="label">{t("timer.feedbackTitle")}</p>
-          <div className="mt-3 grid gap-2 sm:grid-cols-3">
-            {sessionFeedbackOptions.map((option) => {
-              const isSelected = selectedFeedback === option.value;
-
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  className={`rounded-md border px-3 py-3 text-center transition ${
-                    isSelected
-                      ? "border-cyan-300 bg-cyan-300/15 text-cyan-100 shadow-glow"
-                      : "border-slate-800 bg-slate-950 text-slate-300 hover:border-slate-600"
-                  }`}
-                  aria-pressed={isSelected}
-                  onClick={() => updateFeedback(option.value)}
-                >
-                  <span className="block text-3xl" aria-hidden="true">
-                    {option.emoji}
-                  </span>
-                  <span className="mt-2 block text-sm font-bold">{t(option.labelKey)}</span>
-                </button>
-              );
-            })}
-          </div>
-          <p className="mt-2 text-xs text-slate-500">{t("timer.feedbackDefault")}</p>
-        </div>
-      ) : null}
-
       <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {session.steps.map((step) => (
           <div key={step.id} className="rounded-md border border-slate-800 bg-slate-950/70 p-3">
@@ -473,6 +464,13 @@ function WorkoutRunner({
     settings,
     onComplete: saveSession ? onSessionComplete : () => undefined,
   });
+  const [completedFeedback, setCompletedFeedback] = useState<WorkoutSessionFeedback>("ok");
+
+  useEffect(() => {
+    if (completedSession?.completed) {
+      setCompletedFeedback(completedSession.feedback ?? "ok");
+    }
+  }, [completedSession?.completed, completedSession?.feedback, completedSession?.id]);
 
   const isRunning =
     state.phase === "starting" ||
@@ -531,6 +529,14 @@ function WorkoutRunner({
       : settings.notificationMode === "beep"
         ? t("settings.modeBeeps")
         : t("settings.modeOff");
+  const updateCompletedFeedback = (feedback: WorkoutSessionFeedback) => {
+    if (!completedSession?.completed) {
+      return;
+    }
+
+    setCompletedFeedback(feedback);
+    void onSessionComplete({ ...completedSession, feedback });
+  };
 
   return (
     <section className="space-y-5">
@@ -597,7 +603,12 @@ function WorkoutRunner({
             </div>
 
             <div className="py-8 text-center">
-              {state.phase === "exercise_reps" && currentStep?.type === "reps" ? (
+              {state.phase === "completed" && saveSession && completedSession?.completed ? (
+                <SessionFeedbackPicker
+                  selectedFeedback={completedFeedback}
+                  onSelect={updateCompletedFeedback}
+                />
+              ) : state.phase === "exercise_reps" && currentStep?.type === "reps" ? (
                 <div>
                   <div className="text-7xl font-black tracking-normal text-cyan-200 sm:text-8xl">
                     {currentStep.reps}
@@ -718,9 +729,7 @@ function WorkoutRunner({
         plan={plan}
       />
 
-      {completedSession && saveSession ? (
-        <SessionSummary onFeedbackChange={onSessionComplete} session={completedSession} />
-      ) : null}
+      {completedSession && saveSession ? <SessionSummary session={completedSession} /> : null}
       {completedSession && !saveSession ? (
         <div className="panel p-4">
           <p className="label">{t("common.complete")}</p>

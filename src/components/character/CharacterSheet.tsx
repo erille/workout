@@ -810,8 +810,21 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
 
   return (
     <section className="space-y-5">
-      <div>
-        <h2 className="text-2xl font-bold text-slate-50">{t("character.title")}</h2>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-50">{t("character.title")}</h2>
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+          {measurementMessage ? (
+            <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100">
+              {measurementMessage}
+            </div>
+          ) : null}
+          <button type="button" className="primary-button" onClick={openMeasurementModal}>
+            <Plus aria-hidden="true" size={17} />
+            {t("character.addMeasurement")}
+          </button>
+        </div>
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[22rem_minmax(0,1fr)]">
@@ -965,18 +978,6 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
         </aside>
 
         <div className="space-y-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-            {measurementMessage ? (
-              <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100">
-                {measurementMessage}
-              </div>
-            ) : null}
-            <button type="button" className="primary-button" onClick={openMeasurementModal}>
-              <Plus aria-hidden="true" size={17} />
-              {t("character.addMeasurement")}
-            </button>
-          </div>
-
           <div className="panel p-4">
             <div>
               <p className="label">{t("character.latest")}</p>

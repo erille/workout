@@ -72,6 +72,7 @@ const sessionFeedbackDisplay: Record<
   ok: { emoji: "😃", labelKey: "sessionFeedback.ok" },
   great: { emoji: "😍", labelKey: "sessionFeedback.great" },
 };
+const sessionFeedbackOrder: WorkoutSessionFeedback[] = ["tired", "ok", "great"];
 
 function getSessionFeedback(session: WorkoutSession): WorkoutSessionFeedback | undefined {
   return session.feedback ?? (session.completed ? "ok" : undefined);
@@ -216,6 +217,7 @@ export function WorkoutHistory({
   const [manualWorkoutPlanId, setManualWorkoutPlanId] = useState<string | undefined>(undefined);
   const [manualStartedAt, setManualStartedAt] = useState(() => toDateTimeInputValue(new Date()));
   const [manualDurationMinutes, setManualDurationMinutes] = useState(60);
+  const [manualFeedback, setManualFeedback] = useState<WorkoutSessionFeedback>("ok");
   const [manualSteps, setManualSteps] = useState<ManualStepForm[]>(() => [createManualStep()]);
   const [selectedPlanId, setSelectedPlanId] = useState("");
   const [expandedSessionIds, setExpandedSessionIds] = useState<Set<string>>(() => new Set());
@@ -253,6 +255,10 @@ export function WorkoutHistory({
       );
     });
   }, [language, query, sessions]);
+  const editingSession = editingSessionId
+    ? sessions.find((session) => session.id === editingSessionId)
+    : undefined;
+  const canEditManualFeedback = !editingSessionId || editingSession?.completed !== false;
 
   const resetManualForm = () => {
     setEditingSessionId(null);
@@ -260,6 +266,7 @@ export function WorkoutHistory({
     setManualWorkoutPlanId(undefined);
     setManualStartedAt(toDateTimeInputValue(new Date()));
     setManualDurationMinutes(60);
+    setManualFeedback("ok");
     setManualSteps([createManualStep()]);
     setSelectedPlanId("");
     setManualError(null);
@@ -271,6 +278,7 @@ export function WorkoutHistory({
     setManualWorkoutPlanId(session.workoutPlanId);
     setManualStartedAt(toDateTimeInputValue(new Date(session.startedAt)));
     setManualDurationMinutes(getSessionDurationMinutes(session));
+    setManualFeedback(getSessionFeedback(session) ?? "ok");
     setSelectedPlanId(session.workoutPlanId ?? "");
     setManualSteps(
       session.steps.length > 0 ? session.steps.map(createManualStepFromSessionStep) : [createManualStep()],
@@ -467,7 +475,7 @@ export function WorkoutHistory({
       startedAt: startedAt.toISOString(),
       completedAt: completedAt.toISOString(),
       completed: existingSession?.completed ?? true,
-      feedback: existingSession?.feedback ?? "ok",
+      feedback: existingSession?.completed === false ? existingSession.feedback : manualFeedback,
       roundsCompleted,
       steps,
     };
@@ -632,6 +640,44 @@ export function WorkoutHistory({
               />
             </label>
           </div>
+
+          {canEditManualFeedback ? (
+            <div className="rounded-md border border-slate-800 bg-slate-950/70 p-3">
+              <p className="label">{t("timer.feedbackTitle")}</p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                {sessionFeedbackOrder.map((feedback) => {
+                  const feedbackDisplay = sessionFeedbackDisplay[feedback];
+                  const isSelected = manualFeedback === feedback;
+
+                  return (
+                    <button
+                      key={feedback}
+                      type="button"
+                      className={`rounded-md border px-3 py-3 text-center transition ${
+                        isSelected
+                          ? "border-cyan-300 bg-cyan-300/15 text-cyan-100 shadow-glow"
+                          : "border-slate-800 bg-slate-950 text-slate-300 hover:border-slate-600"
+                      }`}
+                      aria-pressed={isSelected}
+                      onClick={() => {
+                        setManualFeedback(feedback);
+                        setManualError(null);
+                        setManualMessage(null);
+                      }}
+                    >
+                      <span className="block text-3xl" aria-hidden="true">
+                        {feedbackDisplay.emoji}
+                      </span>
+                      <span className="mt-2 block text-sm font-bold">
+                        {t(feedbackDisplay.labelKey)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-2 text-xs text-slate-500">{t("timer.feedbackDefault")}</p>
+            </div>
+          ) : null}
 
           <datalist id="manual-exercise-options">
             {exercises.map((exercise) => (

@@ -10,12 +10,16 @@ import {
 import { useMemo, useState } from "react";
 import { useI18n } from "../../i18n/I18nContext";
 import { translateExerciseName } from "../../i18n/exerciseNames";
+import type { Exercise } from "../../models/exercise";
 import type { CharacterProfile } from "../../models/profile";
+import type { AppSettings, ExerciseStatsAlias } from "../../models/settings";
 import type { WorkoutSession } from "../../models/session";
 
 type StatisticsPageProps = {
+  exercises: Exercise[];
   profile: CharacterProfile;
   sessions: WorkoutSession[];
+  settings: AppSettings;
 };
 
 type ViewMode = "weeks" | "month" | "year";
@@ -48,10 +52,15 @@ type LiftEntry = {
 
 type LiftExerciseSummary = {
   bestEstimatedOneRepMaxKg: number;
-  exerciseId?: string;
   exerciseName: string;
+  key: string;
   sets: number;
   volumeKg: number;
+};
+
+type ExerciseStatsAliasResolver = {
+  resolveKey: (entry: Pick<LiftEntry, "exerciseId" | "exerciseName">) => string;
+  resolveLabel: (entry: Pick<LiftEntry, "exerciseId" | "exerciseName">) => string;
 };
 
 type LiftVolumeBucket = {
@@ -353,8 +362,43 @@ function getLiftRange(
   return { end: addYears(start, 1), start };
 }
 
-function liftExerciseKey(entry: Pick<LiftEntry, "exerciseId" | "exerciseName">): string {
+function defaultLiftExerciseKey(entry: Pick<LiftEntry, "exerciseId" | "exerciseName">): string {
   return entry.exerciseId ?? entry.exerciseName.toLowerCase();
+}
+
+function buildExerciseStatsAliasResolver(
+  aliases: ExerciseStatsAlias[],
+  exercises: Exercise[],
+  language: "en" | "fr",
+): ExerciseStatsAliasResolver {
+  const exerciseById = new Map(exercises.map((exercise) => [exercise.id, exercise]));
+  const aliasByExerciseId = new Map<string, ExerciseStatsAlias>();
+
+  aliases.forEach((alias) => {
+    aliasByExerciseId.set(alias.canonicalExerciseId, alias);
+    alias.aliasExerciseIds.forEach((exerciseId) => {
+      aliasByExerciseId.set(exerciseId, alias);
+    });
+  });
+
+  return {
+    resolveKey(entry) {
+      const alias = entry.exerciseId ? aliasByExerciseId.get(entry.exerciseId) : undefined;
+      return alias ? `alias:${alias.canonicalExerciseId}` : defaultLiftExerciseKey(entry);
+    },
+    resolveLabel(entry) {
+      const alias = entry.exerciseId ? aliasByExerciseId.get(entry.exerciseId) : undefined;
+
+      if (alias) {
+        const canonicalExercise = exerciseById.get(alias.canonicalExerciseId);
+        return canonicalExercise
+          ? translateExerciseName(canonicalExercise, language)
+          : entry.exerciseName;
+      }
+
+      return translateExerciseName(entry, language);
+    },
+  };
 }
 
 function getChartColor(index: number): string {
@@ -364,13 +408,13 @@ function getChartColor(index: number): string {
 function buildWeightUsedSeries(
   entries: LiftEntry[],
   formatSetCount: (count: number) => string,
-  language: "en" | "fr",
   locale: string,
+  aliasResolver: ExerciseStatsAliasResolver,
 ): ExerciseChartSeries[] {
   const groupedEntries = new Map<string, LiftEntry[]>();
 
   entries.forEach((entry) => {
-    const key = liftExerciseKey(entry);
+    const key = aliasResolver.resolveKey(entry);
     groupedEntries.set(key, [...(groupedEntries.get(key) ?? []), entry]);
   });
 
@@ -384,7 +428,7 @@ function buildWeightUsedSeries(
       return {
         color: getChartColor(index),
         key,
-        label: translateExerciseName(exercise, language),
+        label: aliasResolver.resolveLabel(exercise),
         metaLabel: formatSetCount(sortedEntries.length),
         points: sortedEntries.map((entry, entryIndex) => ({
           key: `${key}-${entry.occurredAt.toISOString()}-${entry.order}-${entryIndex}`,
@@ -400,13 +444,13 @@ function buildWeightUsedSeries(
 
 function buildVolumeOverTimeSeries(
   entries: LiftEntry[],
-  language: "en" | "fr",
   locale: string,
+  aliasResolver: ExerciseStatsAliasResolver,
 ): ExerciseChartSeries[] {
   const groupedEntries = new Map<string, LiftEntry[]>();
 
   entries.forEach((entry) => {
-    const key = liftExerciseKey(entry);
+    const key = aliasResolver.resolveKey(entry);
     groupedEntries.set(key, [...(groupedEntries.get(key) ?? []), entry]);
   });
 
@@ -449,7 +493,7 @@ function buildVolumeOverTimeSeries(
       return {
         color: getChartColor(index),
         key,
-        label: translateExerciseName(exercise, language),
+        label: aliasResolver.resolveLabel(exercise),
         metaLabel: formatKg(locale, totalVolume),
         points,
       };
@@ -462,15 +506,18 @@ function buildVolumeOverTimeSeries(
     );
 }
 
-function getTopLiftExercises(entries: LiftEntry[]): LiftExerciseSummary[] {
+function getTopLiftExercises(
+  entries: LiftEntry[],
+  aliasResolver: ExerciseStatsAliasResolver,
+): LiftExerciseSummary[] {
   const summaries = new Map<string, LiftExerciseSummary>();
 
   entries.forEach((entry) => {
-    const key = liftExerciseKey(entry);
+    const key = aliasResolver.resolveKey(entry);
     const current = summaries.get(key) ?? {
       bestEstimatedOneRepMaxKg: 0,
-      exerciseId: entry.exerciseId,
-      exerciseName: entry.exerciseName,
+      exerciseName: aliasResolver.resolveLabel(entry),
+      key,
       sets: 0,
       volumeKg: 0,
     };
@@ -920,7 +967,7 @@ function ExerciseTrendPanel({
   );
 }
 
-export function StatisticsPage({ profile, sessions }: StatisticsPageProps) {
+export function StatisticsPage({ exercises, profile, sessions, settings }: StatisticsPageProps) {
   const { language, t } = useI18n();
   const [viewMode, setViewMode] = useState<ViewMode>("weeks");
   const [liftViewMode, setLiftViewMode] = useState<ViewMode>("weeks");
@@ -946,9 +993,18 @@ export function StatisticsPage({ profile, sessions }: StatisticsPageProps) {
     [locale, selectedYear, sessionDates],
   );
   const liftEntries = useMemo(() => getLiftEntries(sessions), [sessions]);
+  const aliasResolver = useMemo(
+    () =>
+      buildExerciseStatsAliasResolver(
+        settings.exerciseStatsAliases,
+        exercises,
+        language,
+      ),
+    [exercises, language, settings.exerciseStatsAliases],
+  );
   const volumeOverTimeSeries = useMemo(
-    () => buildVolumeOverTimeSeries(liftEntries, language, locale),
-    [language, liftEntries, locale],
+    () => buildVolumeOverTimeSeries(liftEntries, locale, aliasResolver),
+    [aliasResolver, liftEntries, locale],
   );
   const liftRange = useMemo(
     () => getLiftRange(liftViewMode, today, selectedMonth, selectedYear),
@@ -967,28 +1023,25 @@ export function StatisticsPage({ profile, sessions }: StatisticsPageProps) {
             count,
             plural: count === 1 ? "" : "s",
           }),
-        language,
         locale,
+        aliasResolver,
       ),
-    [language, liftChartEntries, locale, t],
+    [aliasResolver, liftChartEntries, locale, t],
   );
   const liftYearBuckets = useMemo(
     () => buildLiftYearBuckets(liftEntries, locale, selectedYear),
     [liftEntries, locale, selectedYear],
   );
-  const topLiftExercises = useMemo(() => getTopLiftExercises(liftEntries), [liftEntries]);
+  const topLiftExercises = useMemo(
+    () => getTopLiftExercises(liftEntries, aliasResolver),
+    [aliasResolver, liftEntries],
+  );
   const selectedLiftExercise =
-    topLiftExercises.find(
-      (exercise) => (exercise.exerciseId ?? exercise.exerciseName.toLowerCase()) === selectedLiftExerciseKey,
-    ) ?? topLiftExercises[0];
-  const selectedLiftExerciseKeyValue = selectedLiftExercise
-    ? selectedLiftExercise.exerciseId ?? selectedLiftExercise.exerciseName.toLowerCase()
-    : null;
+    topLiftExercises.find((exercise) => exercise.key === selectedLiftExerciseKey) ??
+    topLiftExercises[0];
+  const selectedLiftExerciseKeyValue = selectedLiftExercise?.key ?? null;
   const selectedLiftEntries = selectedLiftExerciseKeyValue
-    ? liftEntries.filter(
-        (entry) =>
-          (entry.exerciseId ?? entry.exerciseName.toLowerCase()) === selectedLiftExerciseKeyValue,
-      )
+    ? liftEntries.filter((entry) => aliasResolver.resolveKey(entry) === selectedLiftExerciseKeyValue)
     : [];
   const selectedLiftBuckets = useMemo(
     () => buildLiftYearBuckets(selectedLiftEntries, locale, selectedYear),
@@ -1369,21 +1422,17 @@ export function StatisticsPage({ profile, sessions }: StatisticsPageProps) {
                 <div className="mt-3 space-y-3">
                   {topLiftExercises.map((exercise) => (
                     <button
-                      key={exercise.exerciseId ?? exercise.exerciseName}
+                      key={exercise.key}
                       type="button"
                       className={`w-full rounded-md border p-3 text-left transition ${
-                        selectedLiftExerciseKeyValue === (exercise.exerciseId ?? exercise.exerciseName.toLowerCase())
+                        selectedLiftExerciseKeyValue === exercise.key
                           ? "border-cyan-300 bg-cyan-300/15"
                           : "border-transparent bg-slate-900/80 hover:border-slate-600"
                       }`}
-                      onClick={() =>
-                        setSelectedLiftExerciseKey(exercise.exerciseId ?? exercise.exerciseName.toLowerCase())
-                      }
+                      onClick={() => setSelectedLiftExerciseKey(exercise.key)}
                     >
                       <div className="flex items-start justify-between gap-3">
-                        <p className="font-bold text-slate-50">
-                          {translateExerciseName(exercise, language)}
-                        </p>
+                        <p className="font-bold text-slate-50">{exercise.exerciseName}</p>
                         <span className="rounded-md bg-emerald-300 px-2 py-1 text-xs font-black text-emerald-950">
                           {formatKg(locale, exercise.volumeKg)}
                         </span>
@@ -1422,7 +1471,7 @@ export function StatisticsPage({ profile, sessions }: StatisticsPageProps) {
             <ExerciseTrendPanel
               buckets={selectedLiftBuckets}
               entries={selectedLiftEntries}
-              exerciseName={translateExerciseName(selectedLiftExercise, language)}
+              exerciseName={selectedLiftExercise.exerciseName}
               locale={locale}
             />
           </div>

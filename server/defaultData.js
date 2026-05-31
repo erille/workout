@@ -137,6 +137,7 @@ export const defaultSettings = {
   language: "fr",
   exerciseDefaultsVersion: 1,
   exerciseCategories,
+  exerciseStatsAliases: [],
 };
 
 export const defaultProfile = {

@@ -4,6 +4,7 @@ import { defaultProfile, type CharacterProfile } from "../models/profile";
 import {
   defaultSettings,
   type AppSettings,
+  type ExerciseStatsAlias,
   type NotificationMode,
   type VoiceLanguage,
   type VoiceProvider,
@@ -233,6 +234,53 @@ function normalizeNotificationMode(settings?: Partial<AppSettings>): Notificatio
   return settings?.voiceEnabled === false ? "off" : defaultSettings.notificationMode;
 }
 
+function normalizeExerciseStatsAliases(value?: unknown): ExerciseStatsAlias[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const usedExerciseIds = new Set<string>();
+  const aliases: ExerciseStatsAlias[] = [];
+
+  value.forEach((item) => {
+    if (!isRecord(item) || Array.isArray(item)) {
+      return;
+    }
+
+    const canonicalExerciseId =
+      typeof item.canonicalExerciseId === "string" ? item.canonicalExerciseId.trim() : "";
+    const rawAliasIds = Array.isArray(item.aliasExerciseIds) ? item.aliasExerciseIds : [];
+
+    if (!canonicalExerciseId || usedExerciseIds.has(canonicalExerciseId)) {
+      return;
+    }
+
+    const aliasExerciseIds = rawAliasIds
+      .filter((aliasId): aliasId is string => typeof aliasId === "string")
+      .map((aliasId) => aliasId.trim())
+      .filter((aliasId) => aliasId && aliasId !== canonicalExerciseId)
+      .filter((aliasId, index, allAliasIds) => allAliasIds.indexOf(aliasId) === index)
+      .filter((aliasId) => !usedExerciseIds.has(aliasId));
+
+    if (aliasExerciseIds.length === 0) {
+      return;
+    }
+
+    const id = typeof item.id === "string" && item.id.trim() ? item.id.trim() : canonicalExerciseId;
+
+    aliases.push({
+      id,
+      canonicalExerciseId,
+      aliasExerciseIds,
+    });
+
+    usedExerciseIds.add(canonicalExerciseId);
+    aliasExerciseIds.forEach((aliasId) => usedExerciseIds.add(aliasId));
+  });
+
+  return aliases;
+}
+
 function normalizeSettings(settings?: Partial<AppSettings>): AppSettings {
   const notificationMode = normalizeNotificationMode(settings);
   const voiceProvider: VoiceProvider =
@@ -256,6 +304,7 @@ function normalizeSettings(settings?: Partial<AppSettings>): AppSettings {
     settings?.exerciseCategories,
     language,
   );
+  const exerciseStatsAliases = normalizeExerciseStatsAliases(settings?.exerciseStatsAliases);
 
   return {
     ...defaultSettings,
@@ -267,6 +316,7 @@ function normalizeSettings(settings?: Partial<AppSettings>): AppSettings {
     voiceEnabled: notificationMode === "voice",
     exerciseDefaultsVersion,
     exerciseCategories,
+    exerciseStatsAliases,
   };
 }
 

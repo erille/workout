@@ -1,8 +1,20 @@
-import { Download, Save, Trash2, Upload, Volume1, Volume2, VolumeX } from "lucide-react";
-import { type ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
+import {
+  ChevronDown,
+  Download,
+  Link2,
+  Save,
+  Trash2,
+  Upload,
+  Volume1,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
+import { type ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { exportLocalData, importLocalData, type StorageMode } from "../../data/storage";
 import { useI18n } from "../../i18n/I18nContext";
+import { translateExerciseName } from "../../i18n/exerciseNames";
 import type { Language } from "../../i18n/translations";
+import type { Exercise } from "../../models/exercise";
 import type {
   AppSettings,
   NotificationMode,
@@ -20,6 +32,7 @@ import {
 } from "../../services/speechService";
 
 type SettingsPageProps = {
+  exercises: Exercise[];
   settings: AppSettings;
   storageMode: StorageMode;
   onSaveSettings: (settings: AppSettings) => Promise<void>;
@@ -67,10 +80,18 @@ function notificationIcon(mode: NotificationMode) {
   return <Volume2 aria-hidden="true" size={22} />;
 }
 
-export function SettingsPage({ onSaveSettings, settings, storageMode }: SettingsPageProps) {
-  const { t } = useI18n();
+export function SettingsPage({
+  exercises,
+  onSaveSettings,
+  settings,
+  storageMode,
+}: SettingsPageProps) {
+  const { language, t } = useI18n();
   const [draft, setDraft] = useState<AppSettings>(settings);
   const [message, setMessage] = useState<string | null>(null);
+  const [isStatsAliasesOpen, setIsStatsAliasesOpen] = useState(false);
+  const [aliasCanonicalExerciseId, setAliasCanonicalExerciseId] = useState("");
+  const [aliasExerciseIds, setAliasExerciseIds] = useState<string[]>([]);
   const [coachHistoryMessage, setCoachHistoryMessage] = useState<{
     type: "success" | "error";
     text: string;
@@ -88,10 +109,51 @@ export function SettingsPage({ onSaveSettings, settings, storageMode }: Settings
   const isPiperVoiceProvider = draft.voiceProvider === "piper";
   const effectiveVoiceLanguage = draft.voiceLanguage === "app" ? draft.language : draft.voiceLanguage;
   const piperVoice = ttsStatus?.voices.find((voice) => voice.language === effectiveVoiceLanguage);
+  const sortedExercises = useMemo(
+    () =>
+      [...exercises].sort((left, right) =>
+        translateExerciseName(left, language).localeCompare(
+          translateExerciseName(right, language),
+          language === "fr" ? "fr-FR" : "en-US",
+        ),
+      ),
+    [exercises, language],
+  );
+  const exerciseLabelById = useMemo(
+    () =>
+      new Map(
+        sortedExercises.map((exercise) => [exercise.id, translateExerciseName(exercise, language)]),
+      ),
+    [language, sortedExercises],
+  );
+  const availableAliasExercises = sortedExercises.filter(
+    (exercise) => exercise.id !== aliasCanonicalExerciseId,
+  );
+  const selectedAliasExerciseIds = aliasExerciseIds.filter(
+    (exerciseId) =>
+      exerciseId !== aliasCanonicalExerciseId && sortedExercises.some((exercise) => exercise.id === exerciseId),
+  );
 
   useEffect(() => {
     setDraft(settings);
   }, [settings]);
+
+  useEffect(() => {
+    if (sortedExercises.length === 0) {
+      setAliasCanonicalExerciseId("");
+      setAliasExerciseIds([]);
+      return;
+    }
+
+    setAliasCanonicalExerciseId((current) =>
+      sortedExercises.some((exercise) => exercise.id === current) ? current : sortedExercises[0].id,
+    );
+    setAliasExerciseIds((current) =>
+      current.filter((exerciseId) =>
+        sortedExercises.some((exercise) => exercise.id === exerciseId),
+      ),
+    );
+  }, [sortedExercises]);
 
   useEffect(() => {
     if (!speechSupported) {
@@ -208,6 +270,46 @@ export function SettingsPage({ onSaveSettings, settings, storageMode }: Settings
     } finally {
       setIsDeletingCoachHistory(false);
     }
+  };
+
+  const getExerciseLabel = (exerciseId: string): string => exerciseLabelById.get(exerciseId) ?? exerciseId;
+
+  const handleAliasExerciseToggle = (exerciseId: string) => {
+    setAliasExerciseIds((current) =>
+      current.includes(exerciseId)
+        ? current.filter((currentExerciseId) => currentExerciseId !== exerciseId)
+        : [...current, exerciseId],
+    );
+  };
+
+  const handleAddStatsAlias = () => {
+    if (!aliasCanonicalExerciseId || selectedAliasExerciseIds.length === 0) {
+      return;
+    }
+
+    const groupedExerciseIds = new Set([aliasCanonicalExerciseId, ...selectedAliasExerciseIds]);
+    const remainingAliases = draft.exerciseStatsAliases.filter((alias) => {
+      const existingExerciseIds = [alias.canonicalExerciseId, ...alias.aliasExerciseIds];
+      return existingExerciseIds.every((exerciseId) => !groupedExerciseIds.has(exerciseId));
+    });
+
+    updateDraft({
+      exerciseStatsAliases: [
+        ...remainingAliases,
+        {
+          id: aliasCanonicalExerciseId,
+          canonicalExerciseId: aliasCanonicalExerciseId,
+          aliasExerciseIds: selectedAliasExerciseIds,
+        },
+      ],
+    });
+    setAliasExerciseIds([]);
+  };
+
+  const handleDeleteStatsAlias = (aliasId: string) => {
+    updateDraft({
+      exerciseStatsAliases: draft.exerciseStatsAliases.filter((alias) => alias.id !== aliasId),
+    });
   };
 
   const notificationOptions: Array<{
@@ -496,6 +598,134 @@ export function SettingsPage({ onSaveSettings, settings, storageMode }: Settings
             />
           </label>
         ) : null}
+
+        <div className="rounded-lg border border-slate-800 bg-slate-950/50">
+          <button
+            type="button"
+            className="flex w-full items-center justify-between gap-4 p-4 text-left"
+            aria-expanded={isStatsAliasesOpen}
+            onClick={() => setIsStatsAliasesOpen((current) => !current)}
+          >
+            <span>
+              <span className="label">{t("settings.advanced")}</span>
+              <span className="mt-1 block font-bold text-slate-50">
+                {t("settings.statsAliasesTitle")}
+              </span>
+              <span className="mt-1 block text-sm text-slate-400">
+                {t("settings.advancedDescription")}
+              </span>
+            </span>
+            <ChevronDown
+              aria-hidden="true"
+              className={`shrink-0 text-slate-400 transition ${
+                isStatsAliasesOpen ? "rotate-180" : ""
+              }`}
+              size={20}
+            />
+          </button>
+
+          {isStatsAliasesOpen ? (
+            <div className="space-y-4 border-t border-slate-800 p-4">
+              <p className="text-sm text-slate-400">{t("settings.statsAliasesDescription")}</p>
+
+              {draft.exerciseStatsAliases.length > 0 ? (
+                <div className="space-y-2">
+                  {draft.exerciseStatsAliases.map((alias) => (
+                    <div
+                      key={alias.id}
+                      className="flex items-center justify-between gap-3 rounded-md border border-slate-800 bg-slate-950 p-3"
+                    >
+                      <div>
+                        <p className="font-bold text-slate-50">
+                          {getExerciseLabel(alias.canonicalExerciseId)}
+                        </p>
+                        <p className="mt-1 text-sm text-slate-400">
+                          {alias.aliasExerciseIds.map(getExerciseLabel).join(", ")}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className="danger-button !px-3"
+                        aria-label={t("settings.statsAliasesDelete")}
+                        onClick={() => handleDeleteStatsAlias(alias.id)}
+                      >
+                        <Trash2 aria-hidden="true" size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="rounded-md border border-dashed border-slate-700 p-3 text-sm text-slate-400">
+                  {t("settings.statsAliasesNoGroups")}
+                </p>
+              )}
+
+              {sortedExercises.length > 0 ? (
+                <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+                  <label className="block space-y-2">
+                    <span className="label">{t("settings.statsAliasesCanonical")}</span>
+                    <select
+                      className="field"
+                      value={aliasCanonicalExerciseId}
+                      onChange={(event) => {
+                        const nextCanonicalExerciseId = event.target.value;
+                        setAliasCanonicalExerciseId(nextCanonicalExerciseId);
+                        setAliasExerciseIds((current) =>
+                          current.filter(
+                            (exerciseId) => exerciseId !== nextCanonicalExerciseId,
+                          ),
+                        );
+                      }}
+                    >
+                      {sortedExercises.map((exercise) => (
+                        <option key={exercise.id} value={exercise.id}>
+                          {translateExerciseName(exercise, language)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <div className="space-y-2">
+                    <span className="label">{t("settings.statsAliasesMerged")}</span>
+                    <div className="max-h-52 space-y-2 overflow-y-auto rounded-md border border-slate-800 bg-slate-950 p-2">
+                      {availableAliasExercises.map((exercise) => (
+                        <label
+                          key={exercise.id}
+                          className="flex items-center gap-3 rounded-md px-2 py-2 text-sm text-slate-200 hover:bg-slate-900"
+                        >
+                          <input
+                            className="h-4 w-4 accent-cyan-300"
+                            type="checkbox"
+                            checked={selectedAliasExerciseIds.includes(exercise.id)}
+                            onChange={() => handleAliasExerciseToggle(exercise.id)}
+                          />
+                          <span>{translateExerciseName(exercise, language)}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      disabled={selectedAliasExerciseIds.length === 0}
+                      onClick={handleAddStatsAlias}
+                    >
+                      <Link2 aria-hidden="true" size={17} />
+                      {t("settings.statsAliasesAdd")}
+                    </button>
+                    <p className="mt-2 text-xs text-slate-500">
+                      {t("settings.statsAliasesSaveHint")}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-slate-400">{t("settings.statsAliasesNoExercises")}</p>
+              )}
+            </div>
+          ) : null}
+        </div>
 
         {message ? (
           <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100">

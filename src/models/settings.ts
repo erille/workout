@@ -8,6 +8,12 @@ export type NotificationMode = "voice" | "beep" | "off";
 export type VoiceProvider = "piper" | "browser";
 export type VoiceLanguage = "app" | Language;
 
+export type ExerciseStatsAlias = {
+  id: string;
+  canonicalExerciseId: string;
+  aliasExerciseIds: string[];
+};
+
 export type AppSettings = {
   voiceEnabled: boolean;
   notificationMode: NotificationMode;
@@ -20,6 +26,7 @@ export type AppSettings = {
   language: Language;
   exerciseDefaultsVersion: number;
   exerciseCategories: ExerciseCategoryDefinition[];
+  exerciseStatsAliases: ExerciseStatsAlias[];
 };
 
 export const defaultSettings: AppSettings = {
@@ -36,4 +43,5 @@ export const defaultSettings: AppSettings = {
     ...category,
     labels: { ...category.labels },
   })),
+  exerciseStatsAliases: [],
 };

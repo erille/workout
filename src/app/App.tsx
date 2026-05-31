@@ -191,7 +191,12 @@ export default function App() {
                 />
               )}
               {currentPage === "statistics" && (
-                <StatisticsPage profile={profile} sessions={sessions} />
+                <StatisticsPage
+                  exercises={exercises}
+                  profile={profile}
+                  sessions={sessions}
+                  settings={settings}
+                />
               )}
               {currentPage === "character" && (
                 <CharacterSheet profile={profile} onSaveProfile={updateProfile} />
@@ -201,6 +206,7 @@ export default function App() {
               )}
               {currentPage === "settings" && (
                 <SettingsPage
+                  exercises={exercises}
                   settings={settings}
                   storageMode={storageMode}
                   onSaveSettings={updateSettings}

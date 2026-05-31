@@ -41,6 +41,7 @@ type LiftEntry = {
   occurredAt: Date;
   order: number;
   reps: number;
+  sessionId: string;
   volumeKg: number;
   weightKg: number;
 };
@@ -61,16 +62,10 @@ type LiftVolumeBucket = {
   volumeKg: number;
 };
 
-type LiftChartBucket = {
-  end: Date;
-  key: string;
-  label: string;
-  start: Date;
-};
-
 type ChartPoint = {
   key: string;
   label: string;
+  time?: number;
   value: number;
 };
 
@@ -280,6 +275,7 @@ function getLiftEntries(sessions: WorkoutSession[]): LiftEntry[] {
           occurredAt,
           order: sessionIndex * 1000 + stepIndex,
           reps: step.reps,
+          sessionId: session.id,
           volumeKg: step.weight * step.reps,
           weightKg: step.weight,
         },
@@ -330,59 +326,6 @@ function buildLiftYearBuckets(
       label: formatShortMonth(locale, month),
       sets: monthEntries.length,
       volumeKg: monthEntries.reduce((total, entry) => total + entry.volumeKg, 0),
-    };
-  });
-}
-
-function buildLiftChartBuckets(
-  viewMode: ViewMode,
-  locale: string,
-  today: Date,
-  selectedMonth: Date,
-  selectedYear: Date,
-): LiftChartBucket[] {
-  if (viewMode === "weeks") {
-    const currentWeekStart = startOfWeek(today);
-
-    return Array.from({ length: 12 }, (_, index) => {
-      const start = addDays(currentWeekStart, (index - 11) * 7);
-
-      return {
-        end: addDays(start, 7),
-        key: toDateKey(start),
-        label: formatWeekLabel(locale, start),
-        start,
-      };
-    });
-  }
-
-  if (viewMode === "month") {
-    const start = monthStart(selectedMonth);
-    const end = addMonths(start, 1);
-    const dayCount = Math.round((end.getTime() - start.getTime()) / 86_400_000);
-
-    return Array.from({ length: dayCount }, (_, index) => {
-      const date = addDays(start, index);
-
-      return {
-        end: addDays(date, 1),
-        key: toDateKey(date),
-        label: new Intl.DateTimeFormat(locale, { day: "numeric", month: "short" }).format(date),
-        start: date,
-      };
-    });
-  }
-
-  const start = yearStart(selectedYear);
-
-  return Array.from({ length: 12 }, (_, index) => {
-    const month = addMonths(start, index);
-
-    return {
-      end: addMonths(month, 1),
-      key: `${month.getFullYear()}-${month.getMonth()}`,
-      label: formatShortMonth(locale, month),
-      start: month,
     };
   });
 }
@@ -455,9 +398,8 @@ function buildWeightUsedSeries(
     .sort((a, b) => b.points.length - a.points.length);
 }
 
-function buildVolumeByExerciseSeries(
+function buildVolumeOverTimeSeries(
   entries: LiftEntry[],
-  buckets: LiftChartBucket[],
   language: "en" | "fr",
   locale: string,
 ): ExerciseChartSeries[] {
@@ -471,18 +413,37 @@ function buildVolumeByExerciseSeries(
   return [...groupedEntries.entries()]
     .map(([key, exerciseEntries], index) => {
       const exercise = exerciseEntries[0];
-      const points = buckets.map((bucket) => {
-        const volume = getLiftEntriesInRange(exerciseEntries, bucket.start, bucket.end).reduce(
-          (total, entry) => total + entry.volumeKg,
-          0,
-        );
+      const sessionVolume = new Map<
+        string,
+        {
+          occurredAt: Date;
+          volumeKg: number;
+        }
+      >();
 
-        return {
-          key: `${key}-${bucket.key}`,
-          label: bucket.label,
-          value: volume,
+      exerciseEntries.forEach((entry) => {
+        const current = sessionVolume.get(entry.sessionId) ?? {
+          occurredAt: entry.occurredAt,
+          volumeKg: 0,
         };
+
+        sessionVolume.set(entry.sessionId, {
+          occurredAt:
+            entry.occurredAt.getTime() < current.occurredAt.getTime()
+              ? entry.occurredAt
+              : current.occurredAt,
+          volumeKg: current.volumeKg + entry.volumeKg,
+        });
       });
+
+      const points = [...sessionVolume.entries()]
+        .sort(([, left], [, right]) => left.occurredAt.getTime() - right.occurredAt.getTime())
+        .map(([sessionId, session]) => ({
+          key: `${key}-${sessionId}`,
+          label: new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(session.occurredAt),
+          time: session.occurredAt.getTime(),
+          value: session.volumeKg,
+        }));
       const totalVolume = points.reduce((total, point) => total + point.value, 0);
 
       return {
@@ -493,7 +454,7 @@ function buildVolumeByExerciseSeries(
         points,
       };
     })
-    .filter((series) => series.points.some((point) => point.value > 0))
+    .filter((series) => series.points.length > 0)
     .sort(
       (a, b) =>
         b.points.reduce((total, point) => total + point.value, 0) -
@@ -653,27 +614,39 @@ function maxChartValue(series: ExerciseChartSeries[]): number {
 
 function ExerciseLineChart({
   emptyLabel,
+  height = 300,
+  minWidthClass = "min-w-[42rem]",
   onSelectSeries,
   selectedSeriesKey,
   series,
   valueFormatter,
   valueLabel,
+  xScale = "index",
 }: {
   emptyLabel: string;
+  height?: number;
+  minWidthClass?: string;
   onSelectSeries: (seriesKey: string | null) => void;
   selectedSeriesKey: string | null;
   series: ExerciseChartSeries[];
   valueFormatter: (value: number) => string;
   valueLabel: string;
+  xScale?: "index" | "time";
 }) {
   const width = 760;
-  const height = 300;
   const padding = 38;
   const selectedSeries = selectedSeriesKey
     ? series.filter((item) => item.key === selectedSeriesKey)
     : [];
   const visibleSeries = selectedSeriesKey && selectedSeries.length > 0 ? selectedSeries : series;
   const maxPoints = Math.max(1, ...visibleSeries.map((item) => item.points.length));
+  const timeValues = visibleSeries
+    .flatMap((item) => item.points.map((point) => point.time))
+    .filter((time): time is number => typeof time === "number" && Number.isFinite(time));
+  const useTimeScale = xScale === "time" && timeValues.length > 0;
+  const minTime = Math.min(...timeValues);
+  const maxTime = Math.max(...timeValues);
+  const timeRange = maxTime - minTime || 1;
   const topValue = maxChartValue(visibleSeries);
   const usableWidth = width - padding * 2;
   const usableHeight = height - padding * 2;
@@ -687,8 +660,11 @@ function ExerciseLineChart({
   }
 
   const pointPosition = (point: ChartPoint, pointIndex: number) => {
-    const x =
-      maxPoints === 1
+    const x = useTimeScale
+      ? typeof point.time === "number" && maxTime !== minTime
+        ? padding + ((point.time - minTime) / timeRange) * usableWidth
+        : width / 2
+      : maxPoints === 1
         ? width / 2
         : padding + (pointIndex / Math.max(1, maxPoints - 1)) * usableWidth;
     const y = padding + usableHeight - (point.value / topValue) * usableHeight;
@@ -700,7 +676,7 @@ function ExerciseLineChart({
   return (
     <div className="space-y-3">
       <div className="overflow-x-auto rounded-md border border-slate-800 bg-slate-950/70 p-3">
-        <svg className="min-w-[42rem]" viewBox={`0 0 ${width} ${height}`} role="img">
+        <svg className={minWidthClass} viewBox={`0 0 ${width} ${height}`} role="img">
           <line
             x1={padding}
             x2={padding}
@@ -949,7 +925,7 @@ export function StatisticsPage({ profile, sessions }: StatisticsPageProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("weeks");
   const [liftViewMode, setLiftViewMode] = useState<ViewMode>("weeks");
   const [selectedLiftExerciseKey, setSelectedLiftExerciseKey] = useState<string | null>(null);
-  const [selectedVolumeSeriesKey, setSelectedVolumeSeriesKey] = useState<string | null>(null);
+  const [selectedVolumeTimelineSeriesKey, setSelectedVolumeTimelineSeriesKey] = useState<string | null>(null);
   const [selectedWeightSeriesKey, setSelectedWeightSeriesKey] = useState<string | null>(null);
   const [selectedMonth, setSelectedMonth] = useState(() => monthStart(new Date()));
   const [selectedYear, setSelectedYear] = useState(() => yearStart(new Date()));
@@ -970,6 +946,10 @@ export function StatisticsPage({ profile, sessions }: StatisticsPageProps) {
     [locale, selectedYear, sessionDates],
   );
   const liftEntries = useMemo(() => getLiftEntries(sessions), [sessions]);
+  const volumeOverTimeSeries = useMemo(
+    () => buildVolumeOverTimeSeries(liftEntries, language, locale),
+    [language, liftEntries, locale],
+  );
   const liftRange = useMemo(
     () => getLiftRange(liftViewMode, today, selectedMonth, selectedYear),
     [liftViewMode, selectedMonth, selectedYear, today],
@@ -977,10 +957,6 @@ export function StatisticsPage({ profile, sessions }: StatisticsPageProps) {
   const liftChartEntries = useMemo(
     () => getLiftEntriesInRange(liftEntries, liftRange.start, liftRange.end),
     [liftEntries, liftRange],
-  );
-  const liftChartBuckets = useMemo(
-    () => buildLiftChartBuckets(liftViewMode, locale, today, selectedMonth, selectedYear),
-    [liftViewMode, locale, selectedMonth, selectedYear, today],
   );
   const weightUsedSeries = useMemo(
     () =>
@@ -995,10 +971,6 @@ export function StatisticsPage({ profile, sessions }: StatisticsPageProps) {
         locale,
       ),
     [language, liftChartEntries, locale, t],
-  );
-  const volumeByExerciseSeries = useMemo(
-    () => buildVolumeByExerciseSeries(liftChartEntries, liftChartBuckets, language, locale),
-    [language, liftChartBuckets, liftChartEntries, locale],
   );
   const liftYearBuckets = useMemo(
     () => buildLiftYearBuckets(liftEntries, locale, selectedYear),
@@ -1241,6 +1213,29 @@ export function StatisticsPage({ profile, sessions }: StatisticsPageProps) {
         </div>
       </div>
 
+      <div className="panel p-4 sm:p-5">
+        <div className="mb-4">
+          <p className="label">{t("statistics.volumeTimelineSection")}</p>
+          <h3 className="text-xl font-bold text-slate-50">
+            {t("statistics.volumeTimelineTitle")}
+          </h3>
+          <p className="mt-1 max-w-3xl text-sm text-slate-400">
+            {t("statistics.volumeTimelineDescription")}
+          </p>
+        </div>
+        <ExerciseLineChart
+          emptyLabel={t("statistics.noVolumeTimelineData")}
+          height={380}
+          minWidthClass="min-w-[56rem]"
+          onSelectSeries={setSelectedVolumeTimelineSeriesKey}
+          selectedSeriesKey={selectedVolumeTimelineSeriesKey}
+          series={volumeOverTimeSeries}
+          valueFormatter={(value) => formatKg(locale, value)}
+          valueLabel={t("statistics.volumeAxis")}
+          xScale="time"
+        />
+      </div>
+
       <div className="panel p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -1337,7 +1332,7 @@ export function StatisticsPage({ profile, sessions }: StatisticsPageProps) {
           </div>
         ) : (
           <>
-            <div className="mt-5 grid gap-4 xl:grid-cols-2">
+            <div className="mt-5">
               <div className="rounded-md border border-slate-800 bg-slate-950/60 p-4">
                 <div className="mb-4">
                   <p className="label">{t("statistics.weightUsedChart")}</p>
@@ -1355,26 +1350,6 @@ export function StatisticsPage({ profile, sessions }: StatisticsPageProps) {
                   series={weightUsedSeries}
                   valueFormatter={(value) => formatKg(locale, value, 1)}
                   valueLabel={t("statistics.weightAxis")}
-                />
-              </div>
-
-              <div className="rounded-md border border-slate-800 bg-slate-950/60 p-4">
-                <div className="mb-4">
-                  <p className="label">{t("statistics.weightedVolumeChart")}</p>
-                  <h4 className="text-lg font-bold text-slate-50">
-                    {t("statistics.weightedVolumeByExercise")}
-                  </h4>
-                  <p className="mt-1 text-sm text-slate-400">
-                    {t("statistics.weightedVolumeDescription")}
-                  </p>
-                </div>
-                <ExerciseLineChart
-                  emptyLabel={t("statistics.noVolumeChartData")}
-                  onSelectSeries={setSelectedVolumeSeriesKey}
-                  selectedSeriesKey={selectedVolumeSeriesKey}
-                  series={volumeByExerciseSeries}
-                  valueFormatter={(value) => formatKg(locale, value)}
-                  valueLabel={t("statistics.volumeAxis")}
                 />
               </div>
             </div>

@@ -1,21 +1,5 @@
-import {
-  closestCenter,
-  DndContext,
-  type DragEndEvent,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core";
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { Copy, GripVertical, Plus, Play, Save, Trash2 } from "lucide-react";
+import { arrayMove } from "@dnd-kit/sortable";
+import { ArrowDown, ArrowUp, Copy, Plus, Play, Save, Trash2 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useI18n } from "../../i18n/I18nContext";
 import { translateExerciseName } from "../../i18n/exerciseNames";
@@ -143,49 +127,58 @@ function parseOptionalWeight(value: string): number | undefined {
   return value === "" || !Number.isFinite(parsed) ? undefined : Math.max(0, parsed);
 }
 
-type SortableStepProps = {
+type StepEditorProps = {
   step: WorkoutStep;
   index: number;
+  canMoveDown: boolean;
+  canMoveUp: boolean;
   onDuplicate: (stepId: string) => void;
+  onMoveDown: (stepId: string) => void;
+  onMoveUp: (stepId: string) => void;
   onRemove: (stepId: string) => void;
   onChangeType: (stepId: string, type: WorkoutStep["type"]) => void;
   onUpdate: (stepId: string, update: (step: WorkoutStep) => WorkoutStep) => void;
 };
 
-function SortableStep({
+function StepEditor({
   step,
   index,
+  canMoveDown,
+  canMoveUp,
   onChangeType,
   onDuplicate,
+  onMoveDown,
+  onMoveUp,
   onRemove,
   onUpdate,
-}: SortableStepProps) {
+}: StepEditorProps) {
   const { language, t } = useI18n();
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: step.id,
-  });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
 
   return (
-    <article
-      ref={setNodeRef}
-      style={style}
-      className={`panel p-4 ${isDragging ? "border-cyan-300/80 bg-slate-800" : ""}`}
-    >
+    <article className="panel p-4">
       <div className="grid gap-4 xl:grid-cols-[auto_minmax(13rem,1fr)_minmax(0,2.2fr)_auto] xl:items-start">
-        <button
-          type="button"
-          className="secondary-button w-fit px-3"
-          aria-label={`Drag ${step.exerciseName}`}
-          {...attributes}
-          {...listeners}
-        >
-          <GripVertical aria-hidden="true" size={18} />
-        </button>
+        <div className="flex gap-2 xl:flex-col">
+          <button
+            type="button"
+            className="secondary-button h-10 w-10 px-0 disabled:cursor-not-allowed disabled:opacity-40"
+            aria-label={t("builder.moveStepUp", { number: index + 1 })}
+            disabled={!canMoveUp}
+            title={t("builder.moveStepUp", { number: index + 1 })}
+            onClick={() => onMoveUp(step.id)}
+          >
+            <ArrowUp aria-hidden="true" size={17} />
+          </button>
+          <button
+            type="button"
+            className="secondary-button h-10 w-10 px-0 disabled:cursor-not-allowed disabled:opacity-40"
+            aria-label={t("builder.moveStepDown", { number: index + 1 })}
+            disabled={!canMoveDown}
+            title={t("builder.moveStepDown", { number: index + 1 })}
+            onClick={() => onMoveDown(step.id)}
+          >
+            <ArrowDown aria-hidden="true" size={17} />
+          </button>
+        </div>
 
         <div>
           <p className="text-sm font-semibold text-cyan-200">
@@ -372,13 +365,6 @@ export function WorkoutBuilder({
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    }),
-  );
-
   const filteredExercises = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
 
@@ -487,24 +473,22 @@ export function WorkoutBuilder({
     });
   };
 
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-
-    if (!over || active.id === over.id) {
-      return;
-    }
-
+  const moveStep = (stepId: string, direction: -1 | 1) => {
     updateDraftSteps((steps) => {
-      const oldIndex = steps.findIndex((step) => step.id === active.id);
-      const newIndex = steps.findIndex((step) => step.id === over.id);
+      const oldIndex = steps.findIndex((step) => step.id === stepId);
+      const newIndex = oldIndex + direction;
 
-      if (oldIndex < 0 || newIndex < 0) {
+      if (oldIndex < 0 || newIndex < 0 || newIndex >= steps.length) {
         return steps;
       }
 
       return arrayMove(steps, oldIndex, newIndex);
     });
   };
+
+  const moveStepUp = (stepId: string) => moveStep(stepId, -1);
+
+  const moveStepDown = (stepId: string) => moveStep(stepId, 1);
 
   const buildPlan = (): WorkoutPlan | null => {
     const name = draft.name.trim();
@@ -914,26 +898,23 @@ export function WorkoutBuilder({
               {t("builder.emptySteps")}
             </div>
           ) : (
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-              <SortableContext
-                items={draft.steps.map((step) => step.id)}
-                strategy={verticalListSortingStrategy}
-              >
-                <div className="space-y-3">
-                  {draft.steps.map((step, index) => (
-                    <SortableStep
-                      key={step.id}
-                      index={index}
-                      step={step}
-                      onChangeType={changeStepType}
-                      onDuplicate={duplicateStep}
-                      onRemove={removeStep}
-                      onUpdate={updateStep}
-                    />
-                  ))}
-                </div>
-              </SortableContext>
-            </DndContext>
+            <div className="space-y-3">
+              {draft.steps.map((step, index) => (
+                <StepEditor
+                  key={step.id}
+                  canMoveDown={index < draft.steps.length - 1}
+                  canMoveUp={index > 0}
+                  index={index}
+                  step={step}
+                  onChangeType={changeStepType}
+                  onDuplicate={duplicateStep}
+                  onMoveDown={moveStepDown}
+                  onMoveUp={moveStepUp}
+                  onRemove={removeStep}
+                  onUpdate={updateStep}
+                />
+              ))}
+            </div>
           )}
         </div>
       </form>

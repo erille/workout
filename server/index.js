@@ -1702,7 +1702,7 @@ async function handleCoachApi(request, response, pathname) {
         model: result.model,
       });
     } catch (error) {
-      jsonResponse(response, error instanceof CoachProviderError ? 502 : 500, {
+      jsonResponse(response, error instanceof CoachProviderError ? 424 : 500, {
         error: error instanceof Error ? error.message : "Server error",
       });
     }

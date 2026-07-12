@@ -56,8 +56,9 @@ function fileNameFromPath(path: string): string {
 }
 
 function avatarLabelFromFileName(fileName: string): string {
-  const baseName = fileName.replace(/\.[^.]+$/, "");
-  const numberedAvatar = baseName.match(/^avatar[-_]?0*(\d+)$/i);
+  const extensionIndex = fileName.lastIndexOf(".");
+  const baseName = extensionIndex > 0 ? fileName.slice(0, extensionIndex) : fileName;
+  const numberedAvatar = /^avatar[-_]?0*(\d+)$/i.exec(baseName);
 
   if (numberedAvatar) {
     return `Avatar ${Number(numberedAvatar[1])}`;
@@ -160,10 +161,12 @@ function resolveProfileImage(profile: CharacterProfile): { alt: string; isPhoto:
   };
 }
 
-export function HomeDashboard({ profile, sessions }: HomeDashboardProps) {
+export function HomeDashboard({ profile, sessions }: Readonly<HomeDashboardProps>) {
   const { t } = useI18n();
   const motivation = useMemo(() => {
-    const index = Math.floor(Math.random() * motivationKeys.length);
+    const randomValue = new Uint32Array(1);
+    globalThis.crypto.getRandomValues(randomValue);
+    const index = (randomValue[0] ?? 0) % motivationKeys.length;
 
     return t(motivationKeys[index] ?? "home.motivation1");
   }, [t]);

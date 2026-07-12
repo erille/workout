@@ -12,10 +12,9 @@ export const exerciseCategories = [
 ] as const;
 
 export type DefaultExerciseCategory = (typeof exerciseCategories)[number];
-export type ExerciseCategory = string;
 export type ExerciseCategoryLabels = Partial<Record<Language, string>>;
 export type ExerciseCategoryDefinition = {
-  id: ExerciseCategory;
+  id: string;
   labels: ExerciseCategoryLabels;
 };
 
@@ -24,7 +23,7 @@ export type ExerciseMode = "time" | "reps" | "distance";
 export type Exercise = {
   id: string;
   name: string;
-  category: ExerciseCategory;
+  category: string;
   defaultMode: ExerciseMode;
   defaultDurationSeconds?: number;
   defaultReps?: number;

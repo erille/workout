@@ -49,8 +49,8 @@ export function useWorkoutPlans(mode: StorageMode, enabled = true, reloadKey = 0
 
   const savePlan = useCallback(
     async (plan: WorkoutPlan) => {
-      const existing = visiblePlans.find((item) => item.id === plan.id);
-      const nextPlans = existing
+      const planExists = visiblePlans.some((item) => item.id === plan.id);
+      const nextPlans = planExists
         ? visiblePlans.map((item) => (item.id === plan.id ? plan : item))
         : [...visiblePlans, plan];
 

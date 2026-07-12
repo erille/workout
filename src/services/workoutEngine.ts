@@ -153,7 +153,7 @@ export function createWorkoutSession(
   steps: WorkoutSessionStep[],
   options?: {
     completed?: boolean;
-    feedback?: WorkoutSession["feedback"];
+    feedback?: Exclude<WorkoutSession["feedback"], undefined>;
     roundsCompleted?: number;
   },
 ): WorkoutSession {

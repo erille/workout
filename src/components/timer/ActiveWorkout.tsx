@@ -16,13 +16,13 @@ import { useWorkoutTimer } from "../../hooks/useWorkoutTimer";
 import { formatDateTime, formatSeconds, getElapsedSeconds } from "../../utils/format";
 import { createId } from "../../utils/id";
 
-type ActiveWorkoutProps = {
+type ActiveWorkoutProps = Readonly<{
   plan: WorkoutPlan | null;
   plans: WorkoutPlan[];
   settings: AppSettings;
   onSelectPlan: (plan: WorkoutPlan | null) => void;
   onSessionComplete: (session: WorkoutSession) => void | Promise<void>;
-};
+}>;
 
 type TimerMode = "quick" | "plans";
 
@@ -53,13 +53,15 @@ function describeStep(
     return noStepLabel;
   }
 
-  const target =
-    step.type === "time"
-      ? `${step.durationSeconds}s`
-      : step.type === "distance"
-        ? `${step.distanceMeters} m`
-        : `${step.reps} reps`;
-  const selectedWeight = options ? options.weight : step.weight;
+  let target: string;
+  if (step.type === "time") {
+    target = `${step.durationSeconds}s`;
+  } else if (step.type === "distance") {
+    target = `${step.distanceMeters} m`;
+  } else {
+    target = `${step.reps} reps`;
+  }
+  const selectedWeight = options?.weight ?? step.weight;
   const weight = typeof selectedWeight === "number" ? ` - ${selectedWeight} kg` : "";
   return `${translateExerciseName(step, language)} - ${target}${weight}`;
 }
@@ -266,10 +268,10 @@ function QuickTimerSetup({ onStart }: { onStart: (plan: WorkoutPlan) => void }) 
 function SessionFeedbackPicker({
   onSelect,
   selectedFeedback,
-}: {
+}: Readonly<{
   onSelect: (feedback: WorkoutSessionFeedback) => void;
   selectedFeedback: WorkoutSessionFeedback;
-}) {
+}>) {
   const { t } = useI18n();
 
   return (
@@ -358,13 +360,13 @@ function WorkoutOrder({
   currentRound,
   language,
   plan,
-}: {
+}: Readonly<{
   activeStepIndex: number;
   activeStepKey: string;
   currentRound: number;
   language: Language;
   plan: WorkoutPlan;
-}) {
+}>) {
   const { t } = useI18n();
 
   return (
@@ -436,14 +438,14 @@ function WorkoutRunner({
   onSessionComplete,
   saveSession = true,
   allowWeightAdjust = true,
-}: {
+}: Readonly<{
   plan: WorkoutPlan;
   settings: AppSettings;
   onExit: () => void;
   onSessionComplete: (session: WorkoutSession) => void | Promise<void>;
   saveSession?: boolean;
   allowWeightAdjust?: boolean;
-}) {
+}>) {
   const { language, t } = useI18n();
   const {
     completedSession,

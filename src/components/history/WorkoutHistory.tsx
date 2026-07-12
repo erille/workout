@@ -41,13 +41,13 @@ import type { WorkoutPlan, WorkoutStep } from "../../models/workout";
 import { formatDateTime, formatSeconds, getElapsedSeconds } from "../../utils/format";
 import { createId } from "../../utils/id";
 
-type WorkoutHistoryProps = {
+type WorkoutHistoryProps = Readonly<{
   exercises: Exercise[];
   plans: WorkoutPlan[];
   sessions: WorkoutSession[];
   onDeleteSession: (sessionId: string) => Promise<void>;
   onSaveSession: (session: WorkoutSession) => Promise<void>;
-};
+}>;
 
 type ManualStepForm = {
   id: string;
@@ -172,7 +172,7 @@ function getSessionDurationMinutes(session: WorkoutSession): number {
 function SortableManualStep({
   children,
   stepId,
-}: {
+}: Readonly<{
   children: (
     sortable: Pick<
       ReturnType<typeof useSortable>,
@@ -180,7 +180,7 @@ function SortableManualStep({
     > & { style: CSSProperties },
   ) => ReactNode;
   stepId: string;
-}) {
+}>) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: stepId,
   });

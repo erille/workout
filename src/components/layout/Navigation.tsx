@@ -15,8 +15,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
-import type { Language } from "../../i18n/translations";
-import type { TranslationKey } from "../../i18n/translations";
+import type { Language, TranslationKey } from "../../i18n/translations";
 import { useI18n } from "../../i18n/I18nContext";
 import type { StorageMode } from "../../data/storage";
 import { MusicPlayer } from "../music/MusicPlayer";
@@ -32,7 +31,7 @@ export type PageId =
   | "coach"
   | "settings";
 
-type NavigationProps = {
+type NavigationProps = Readonly<{
   authEnabled: boolean;
   currentPage: PageId;
   isAuthenticated: boolean;
@@ -42,7 +41,7 @@ type NavigationProps = {
   onLogin: () => void;
   onLogout: () => void;
   onNavigate: (page: PageId) => void;
-};
+}>;
 
 const navItems = [
   { id: "home", labelKey: "nav.home", icon: House },
@@ -69,12 +68,12 @@ export function Navigation({
   const { t } = useI18n();
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const aboutRef = useRef<HTMLDivElement>(null);
-  const modeLabel =
-    storageMode === "local"
-      ? t("auth.localMode")
-      : authEnabled
-        ? t("auth.privateMode")
-        : t("auth.serverMode");
+  let modeLabel = t("auth.serverMode");
+  if (storageMode === "local") {
+    modeLabel = t("auth.localMode");
+  } else if (authEnabled) {
+    modeLabel = t("auth.privateMode");
+  }
   const visibleNavItems =
     storageMode === "server" ? navItems : navItems.filter((item) => item.id !== "coach");
 
@@ -156,7 +155,7 @@ export function Navigation({
                   className="absolute right-0 top-full z-30 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-md border border-slate-700 bg-slate-900 p-4 text-sm text-slate-300 shadow-2xl"
                 >
                   <span className="absolute -top-1 right-6 h-2 w-2 rotate-45 border-l border-t border-slate-700 bg-slate-900" />
-                  This site uses{" "}
+                  {"This site uses "}
                   <a
                     className="font-semibold text-cyan-200 underline-offset-4 hover:text-cyan-100 hover:underline"
                     href="https://github.com/erille/workout"
@@ -165,7 +164,7 @@ export function Navigation({
                   >
                     Workout
                   </a>
-                  , a project by Ketah.
+                  {", a project by Ketah."}
                 </div>
               ) : null}
             </div>

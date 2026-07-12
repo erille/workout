@@ -7,13 +7,13 @@ import type { Exercise } from "../../models/exercise";
 import type { WorkoutPlan, WorkoutStep } from "../../models/workout";
 import { createId } from "../../utils/id";
 
-type WorkoutBuilderProps = {
+type WorkoutBuilderProps = Readonly<{
   exercises: Exercise[];
   plans: WorkoutPlan[];
   onSavePlan: (plan: WorkoutPlan) => Promise<void>;
   onDeletePlan: (planId: string) => Promise<void>;
   onStartPlan: (plan: WorkoutPlan) => void;
-};
+}>;
 
 type DraftPlan = {
   id?: string;
@@ -110,12 +110,14 @@ function getStepTarget(
   step: WorkoutStep,
   labels: { reps: string; meters: string },
 ): string {
-  const target =
-    step.type === "time"
-      ? `${step.durationSeconds}s`
-      : step.type === "distance"
-        ? `${step.distanceMeters} ${labels.meters}`
-        : `${step.reps} ${labels.reps}`;
+  let target: string;
+  if (step.type === "time") {
+    target = `${step.durationSeconds}s`;
+  } else if (step.type === "distance") {
+    target = `${step.distanceMeters} ${labels.meters}`;
+  } else {
+    target = `${step.reps} ${labels.reps}`;
+  }
   const weight = typeof step.weight === "number" ? ` - ${step.weight} kg` : "";
 
   return `${target}${weight}`;
@@ -127,7 +129,7 @@ function parseOptionalWeight(value: string): number | undefined {
   return value === "" || !Number.isFinite(parsed) ? undefined : Math.max(0, parsed);
 }
 
-type StepEditorProps = {
+type StepEditorProps = Readonly<{
   step: WorkoutStep;
   index: number;
   canMoveDown: boolean;
@@ -138,7 +140,7 @@ type StepEditorProps = {
   onRemove: (stepId: string) => void;
   onChangeType: (stepId: string, type: WorkoutStep["type"]) => void;
   onUpdate: (stepId: string, update: (step: WorkoutStep) => WorkoutStep) => void;
-};
+}>;
 
 function StepEditor({
   step,
@@ -503,7 +505,7 @@ export function WorkoutBuilder({
       return null;
     }
 
-    const invalidStep = draft.steps.find((step) => {
+    const hasInvalidStep = draft.steps.some((step) => {
       if (step.breakSeconds < 0 || (step.weight ?? 0) < 0) {
         return true;
       }
@@ -515,7 +517,7 @@ export function WorkoutBuilder({
       return step.type === "distance" ? step.distanceMeters <= 0 : step.reps <= 0;
     });
 
-    if (invalidStep) {
+    if (hasInvalidStep) {
       setError(t("builder.errorValues"));
       return null;
     }

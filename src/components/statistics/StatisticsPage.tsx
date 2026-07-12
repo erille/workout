@@ -15,12 +15,12 @@ import type { CharacterProfile } from "../../models/profile";
 import type { AppSettings, ExerciseStatsAlias } from "../../models/settings";
 import type { WorkoutSession } from "../../models/session";
 
-type StatisticsPageProps = {
+type StatisticsPageProps = Readonly<{
   exercises: Exercise[];
   profile: CharacterProfile;
   sessions: WorkoutSession[];
   settings: AppSettings;
-};
+}>;
 
 type ViewMode = "weeks" | "month" | "year";
 
@@ -579,11 +579,11 @@ function StatCard({
   icon: Icon,
   label,
   value,
-}: {
+}: Readonly<{
   icon: LucideIcon;
   label: string;
   value: string;
-}) {
+}>) {
   return (
     <div className="rounded-md border border-slate-800 bg-slate-950/60 p-4">
       <div className="flex items-center gap-3">
@@ -625,10 +625,10 @@ function BarList({ buckets }: { buckets: PeriodBucket[] }) {
 function VolumeBarList({
   buckets,
   locale,
-}: {
+}: Readonly<{
   buckets: LiftVolumeBucket[];
   locale: string;
-}) {
+}>) {
   const topVolume = maxVolume(buckets);
 
   return (
@@ -669,7 +669,7 @@ function ExerciseLineChart({
   valueFormatter,
   valueLabel,
   xScale = "index",
-}: {
+}: Readonly<{
   emptyLabel: string;
   height?: number;
   minWidthClass?: string;
@@ -679,7 +679,7 @@ function ExerciseLineChart({
   valueFormatter: (value: number) => string;
   valueLabel: string;
   xScale?: "index" | "time";
-}) {
+}>) {
   const width = 760;
   const padding = 38;
   const selectedSeries = selectedSeriesKey
@@ -707,13 +707,12 @@ function ExerciseLineChart({
   }
 
   const pointPosition = (point: ChartPoint, pointIndex: number) => {
-    const x = useTimeScale
-      ? typeof point.time === "number" && maxTime !== minTime
-        ? padding + ((point.time - minTime) / timeRange) * usableWidth
-        : width / 2
-      : maxPoints === 1
-        ? width / 2
-        : padding + (pointIndex / Math.max(1, maxPoints - 1)) * usableWidth;
+    let x = width / 2;
+    if (useTimeScale && typeof point.time === "number" && maxTime !== minTime) {
+      x = padding + ((point.time - minTime) / timeRange) * usableWidth;
+    } else if (!useTimeScale && maxPoints !== 1) {
+      x = padding + (pointIndex / Math.max(1, maxPoints - 1)) * usableWidth;
+    }
     const y = padding + usableHeight - (point.value / topValue) * usableHeight;
 
     return { ...point, x, y };
@@ -723,7 +722,7 @@ function ExerciseLineChart({
   return (
     <div className="space-y-3">
       <div className="overflow-x-auto rounded-md border border-slate-800 bg-slate-950/70 p-3">
-        <svg className={minWidthClass} viewBox={`0 0 ${width} ${height}`} role="img">
+        <svg aria-label={valueLabel} className={minWidthClass} viewBox={`0 0 ${width} ${height}`}>
           <line
             x1={padding}
             x2={padding}
@@ -755,7 +754,7 @@ function ExerciseLineChart({
             {valueLabel}
           </text>
           {visibleSeries.map((line) => {
-            const positionedPoints = line.points.map(pointPosition);
+            const positionedPoints = line.points.map((point, index) => pointPosition(point, index));
             const polylinePoints = positionedPoints.map((point) => `${point.x},${point.y}`).join(" ");
 
             return (
@@ -801,17 +800,18 @@ function ExerciseLineChart({
           const isSelected = selectedSeriesKey === item.key;
           const isDimmed = selectedSeriesKey !== null && !isSelected;
 
+          let buttonClass = "border-slate-800 bg-slate-950/70 text-slate-200 hover:border-slate-600";
+          if (isSelected) {
+            buttonClass = "border-cyan-300 bg-cyan-300/15 text-cyan-100";
+          } else if (isDimmed) {
+            buttonClass = "border-slate-800 bg-slate-950/30 text-slate-500";
+          }
+
           return (
             <button
               key={item.key}
               type="button"
-              className={`inline-flex items-center gap-2 rounded-md border px-2 py-1 text-xs font-bold uppercase tracking-wide transition ${
-                isSelected
-                  ? "border-cyan-300 bg-cyan-300/15 text-cyan-100"
-                  : isDimmed
-                    ? "border-slate-800 bg-slate-950/30 text-slate-500"
-                    : "border-slate-800 bg-slate-950/70 text-slate-200 hover:border-slate-600"
-              }`}
+              className={`inline-flex items-center gap-2 rounded-md border px-2 py-1 text-xs font-bold uppercase tracking-wide transition ${buttonClass}`}
               aria-pressed={isSelected}
               onClick={() => onSelectSeries(isSelected ? null : item.key)}
             >
@@ -834,12 +834,12 @@ function ExerciseTrendPanel({
   entries,
   exerciseName,
   locale,
-}: {
+}: Readonly<{
   buckets: LiftVolumeBucket[];
   entries: LiftEntry[];
   exerciseName: string;
   locale: string;
-}) {
+}>) {
   const { t } = useI18n();
   const topVolume = maxVolume(buckets);
   const topEstimatedOneRepMax = maxEstimatedOneRepMax(buckets);

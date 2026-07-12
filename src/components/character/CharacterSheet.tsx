@@ -16,10 +16,10 @@ import type {
 } from "../../models/profile";
 import { createId } from "../../utils/id";
 
-type CharacterSheetProps = {
+type CharacterSheetProps = Readonly<{
   profile: CharacterProfile;
   onSaveProfile: (profile: CharacterProfile) => Promise<void>;
-};
+}>;
 
 type MeasurementDraft = {
   measuredAt: string;
@@ -77,8 +77,9 @@ function fileNameFromPath(path: string): string {
 }
 
 function avatarLabelFromFileName(fileName: string): string {
-  const baseName = fileName.replace(/\.[^.]+$/, "");
-  const numberedAvatar = baseName.match(/^avatar[-_]?0*(\d+)$/i);
+  const extensionIndex = fileName.lastIndexOf(".");
+  const baseName = extensionIndex > 0 ? fileName.slice(0, extensionIndex) : fileName;
+  const numberedAvatar = /^avatar[-_]?0*(\d+)$/i.exec(baseName);
 
   if (numberedAvatar) {
     return `Avatar ${Number(numberedAvatar[1])}`;
@@ -277,12 +278,12 @@ function MeasurementGraph({
   measurements,
   noDataLabel,
   metricLabels,
-}: {
+}: Readonly<{
   definitions: ReadonlyArray<MeasurementMetricDefinition>;
   measurements: BodyMeasurement[];
   noDataLabel: string;
   metricLabels: Record<MeasurementMetricKey, string>;
-}) {
+}>) {
   const [visibleMetricKeys, setVisibleMetricKeys] = useState<Set<MeasurementMetricKey>>(
     () => new Set(definitions.map((definition) => definition.key)),
   );
@@ -397,8 +398,10 @@ function MeasurementGraph({
     const cursorX = ((event.clientX - rect.left) / rect.width) * viewBox.width + viewBox.x;
     const nearestPoint =
       point ??
-      line.points.reduce((closest, current) =>
-        Math.abs(current.x - cursorX) < Math.abs(closest.x - cursorX) ? current : closest,
+      line.points.reduce(
+        (closest, current) =>
+          Math.abs(current.x - cursorX) < Math.abs(closest.x - cursorX) ? current : closest,
+        line.points[0],
       );
 
     setTooltip({
@@ -432,7 +435,7 @@ function MeasurementGraph({
         <svg
           className="min-w-[42rem]"
           viewBox={`0 0 ${width} ${height}`}
-          role="img"
+          aria-label="Measurement history"
           onMouseLeave={() => setTooltip(null)}
         >
           <line
@@ -910,7 +913,7 @@ export function CharacterSheet({ onSaveProfile, profile }: CharacterSheetProps) 
               <input className="sr-only" accept="image/*" type="file" onChange={handlePhotoUpload} />
             </label>
             {draft.photoDataUrl ? (
-              <button type="button" className="danger-button" onClick={() => updatePhoto(undefined)}>
+              <button type="button" className="danger-button" onClick={() => updatePhoto()}>
                 <X aria-hidden="true" size={17} />
                 {t("character.removePhoto")}
               </button>

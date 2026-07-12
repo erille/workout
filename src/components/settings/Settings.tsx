@@ -31,12 +31,12 @@ import {
   type SpeechVoiceOption,
 } from "../../services/speechService";
 
-type SettingsPageProps = {
+type SettingsPageProps = Readonly<{
   exercises: Exercise[];
   settings: AppSettings;
   storageMode: StorageMode;
   onSaveSettings: (settings: AppSettings) => Promise<void>;
-};
+}>;
 
 function numberValue(value: number): string {
   return value.toFixed(1);
@@ -336,26 +336,25 @@ export function SettingsPage({
     { value: "en", label: t("settings.languageEnglish") },
     { value: "fr", label: t("settings.languageFrench") },
   ];
-  const piperStatusText =
-    ttsStatus === undefined
-      ? t("settings.piperChecking")
-      : ttsStatus === null
-        ? t("settings.piperUnavailable")
-        : piperVoice?.available
-          ? t("settings.piperAvailable")
-          : t("settings.piperUnavailable");
-  const audioStatusText =
-    draft.notificationMode === "off"
-      ? t("settings.audioOff")
-      : isBeepMode
-        ? audioCueSupported
-          ? t("settings.beepsAvailable")
-          : t("settings.beepsUnavailable")
-        : isPiperVoiceProvider
-          ? piperStatusText
-          : speechSupported
-            ? t("settings.speechAvailable")
-            : t("settings.speechUnavailable");
+  let piperStatusText = t("settings.piperUnavailable");
+  if (ttsStatus === undefined) {
+    piperStatusText = t("settings.piperChecking");
+  } else if (piperVoice?.available) {
+    piperStatusText = t("settings.piperAvailable");
+  }
+
+  let audioStatusText = speechSupported
+    ? t("settings.speechAvailable")
+    : t("settings.speechUnavailable");
+  if (draft.notificationMode === "off") {
+    audioStatusText = t("settings.audioOff");
+  } else if (isBeepMode) {
+    audioStatusText = audioCueSupported
+      ? t("settings.beepsAvailable")
+      : t("settings.beepsUnavailable");
+  } else if (isPiperVoiceProvider) {
+    audioStatusText = piperStatusText;
+  }
 
   return (
     <section className="mx-auto max-w-3xl space-y-5">

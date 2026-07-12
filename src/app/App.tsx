@@ -99,10 +99,10 @@ export default function App() {
   };
 
   const toggleLanguage = () => {
-    void updateSettings({
+    updateSettings({
       ...settings,
       language: settings.language === "fr" ? "en" : "fr",
-    });
+    }).catch(() => undefined);
   };
 
   const updateExerciseCategories = async (exerciseCategories: ExerciseCategoryDefinition[]) => {

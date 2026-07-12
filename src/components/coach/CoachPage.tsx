@@ -39,9 +39,9 @@ type CoachChatResponse = {
   nextCursor?: number;
 };
 
-type CoachPageProps = {
+type CoachPageProps = Readonly<{
   onDataChanged: () => void;
-};
+}>;
 
 async function apiJson<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(path, {

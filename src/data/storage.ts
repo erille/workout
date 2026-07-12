@@ -82,7 +82,7 @@ export function invalidateServerDataCache(): void {
 }
 
 function canUseLocalStorage(): boolean {
-  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+  return typeof window !== "undefined" && window.localStorage !== undefined;
 }
 
 function readLocalJson<T>(key: string, fallback: T): T {

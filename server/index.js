@@ -390,7 +390,7 @@ function readBody(request) {
 
 function tableName(table) {
   if (!allowedTables.has(table)) {
-    throw new Error(`Unsupported table: ${table}`);
+    throw new TypeError(`Unsupported table: ${table}`);
   }
 
   return table;
@@ -421,7 +421,7 @@ function writeCollection(table, items) {
 
     for (const item of items) {
       if (!item || typeof item.id !== "string" || item.id.trim().length === 0) {
-        throw new Error(`${table} items must have an id.`);
+        throw new TypeError(`${table} items must have an id.`);
       }
 
       insert.run(item.id, JSON.stringify(item), item.updatedAt ?? item.completedAt ?? now);
@@ -728,7 +728,7 @@ function getCoachConfig() {
   };
 }
 
-function readCoachMessagePage(limit = 80, beforeCursor) {
+function readCoachMessagePage(beforeCursor, limit = 80) {
   const resolvedLimit = Math.max(1, Math.min(200, Math.round(Number(limit) || 80)));
   const parsedBeforeCursor = Number(beforeCursor);
   const hasBeforeCursor = Number.isFinite(parsedBeforeCursor) && parsedBeforeCursor > 0;
@@ -895,7 +895,8 @@ function createSlug(value, fallbackPrefix) {
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+    .replace(/^-+/, "")
+    .replace(/-+$/, "");
 
   return slug || `${fallbackPrefix}-${Date.now()}`;
 }
@@ -1649,7 +1650,7 @@ async function handleCoachApi(request, response, pathname) {
   if (request.method === "GET" && pathname === "/api/coach/messages") {
     const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
 
-    jsonResponse(response, 200, readCoachMessagePage(80, url.searchParams.get("before")));
+    jsonResponse(response, 200, readCoachMessagePage(url.searchParams.get("before")));
     return true;
   }
 

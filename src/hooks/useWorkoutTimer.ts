@@ -82,7 +82,7 @@ function resolveStepWeight(
 
   const weight = weights[key];
 
-  return weight === null ? undefined : weight;
+  return weight ?? undefined;
 }
 
 function resolveVoiceLanguage(settings: AppSettings): Language {

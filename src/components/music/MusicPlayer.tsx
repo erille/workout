@@ -24,9 +24,9 @@ type MusicPlaylistResponse = {
   tracks: MusicTrack[];
 };
 
-type MusicPlayerProps = {
+type MusicPlayerProps = Readonly<{
   enabled: boolean;
-};
+}>;
 
 function volumeIcon(volume: number) {
   if (volume <= 0) {
@@ -99,7 +99,7 @@ export function MusicPlayer({ enabled }: MusicPlayerProps) {
 
         setTracks(loadedTracks);
         const savedIndex = loadedTracks.findIndex((track) => track.id === savedSettings.trackId);
-        setCurrentIndex(savedIndex >= 0 ? savedIndex : 0);
+        setCurrentIndex(Math.max(savedIndex, 0));
         setVolume(savedSettings.volume);
       })
       .catch(() => {
@@ -122,10 +122,10 @@ export function MusicPlayer({ enabled }: MusicPlayerProps) {
     }
 
     if (currentTrack) {
-      void saveMusicPlayerSettings({
+      saveMusicPlayerSettings({
         volume,
         trackId: currentTrack.id,
-      });
+      }).catch(() => undefined);
     }
   }, [currentTrack?.id, volume]);
 
@@ -136,7 +136,7 @@ export function MusicPlayer({ enabled }: MusicPlayerProps) {
       return;
     }
 
-    void audio.play().catch(() => setIsPlaying(false));
+    audio.play().catch(() => setIsPlaying(false));
   }, [currentTrack, isPlaying]);
 
   useEffect(() => {
@@ -216,7 +216,7 @@ export function MusicPlayer({ enabled }: MusicPlayerProps) {
       return;
     }
 
-    void audio
+    audio
       .play()
       .then(() => setIsPlaying(true))
       .catch(() => setIsPlaying(false));
@@ -261,7 +261,9 @@ export function MusicPlayer({ enabled }: MusicPlayerProps) {
         }}
         onPause={() => setIsPlaying(false)}
         onPlay={() => setIsPlaying(true)}
-      />
+      >
+        <track kind="captions" src="/silent-captions.vtt" srcLang="en" label="No dialogue" />
+      </audio>
       {hasMultipleTracks ? (
         <button
           type="button"

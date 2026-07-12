@@ -6,7 +6,6 @@ import { translateExerciseName } from "../../i18n/exerciseNames";
 import {
   createExerciseCategoryDefinition,
   type Exercise,
-  type ExerciseCategory,
   type ExerciseCategoryDefinition,
   type ExerciseMode,
   isDefaultExerciseCategory,
@@ -15,19 +14,19 @@ import {
 } from "../../models/exercise";
 import { createId } from "../../utils/id";
 
-type ExerciseLibraryProps = {
+type ExerciseLibraryProps = Readonly<{
   categories: ExerciseCategoryDefinition[];
   exercises: Exercise[];
   onSaveExercise: (exercise: Exercise) => Promise<void>;
   onSaveExercises: (exercises: Exercise[]) => Promise<void>;
   onSaveCategories: (categories: ExerciseCategoryDefinition[]) => Promise<void>;
   onDeleteExercise: (exerciseId: string) => Promise<void>;
-};
+}>;
 
 type ExerciseFormState = {
   id?: string;
   name: string;
-  category: ExerciseCategory;
+  category: string;
   defaultMode: ExerciseMode;
   defaultDurationSeconds: number;
   defaultReps: number;
@@ -361,7 +360,7 @@ export function ExerciseLibrary({
   };
 
   const confirmDeleteCategory = async () => {
-    if (!deleteRequest || !deleteRequest.replacementCategory) {
+    if (!deleteRequest?.replacementCategory) {
       return;
     }
 
@@ -427,7 +426,7 @@ export function ExerciseLibrary({
       return;
     }
 
-    const duplicate = exercises.find(
+    const duplicate = exercises.some(
       (exercise) =>
         exercise.name.toLowerCase() === trimmedName.toLowerCase() && exercise.id !== form.id,
     );
@@ -526,7 +525,7 @@ export function ExerciseLibrary({
           onChange={(event) =>
             setForm((current) => ({
               ...current,
-              category: event.target.value as ExerciseCategory,
+              category: event.target.value,
             }))
           }
         >

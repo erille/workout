@@ -33,10 +33,10 @@ export function translate(
 export function I18nProvider({
   children,
   language,
-}: {
+}: Readonly<{
   children: ReactNode;
   language: Language;
-}) {
+}>) {
   const value = useMemo<I18nContextValue>(
     () => ({
       language,

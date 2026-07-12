@@ -2,10 +2,10 @@ import { LogIn, X } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { useI18n } from "../../i18n/I18nContext";
 
-type LoginPageProps = {
+type LoginPageProps = Readonly<{
   onCancel: () => void;
   onLogin: (password: string) => Promise<void>;
-};
+}>;
 
 export function LoginPage({ onCancel, onLogin }: LoginPageProps) {
   const { t } = useI18n();

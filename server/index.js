@@ -406,7 +406,7 @@ function readCollection(table) {
 
 function writeCollection(table, items) {
   if (!Array.isArray(items)) {
-    throw new Error(`${table} payload must be an array.`);
+    throw new TypeError(`${table} payload must be an array.`);
   }
 
   const resolvedTable = tableName(table);
@@ -890,13 +890,19 @@ function normalizeKey(value) {
 }
 
 function createSlug(value, fallbackPrefix) {
-  const slug = normalizeCategoryInput(value)
+  let slug = normalizeCategoryInput(value)
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+/, "")
-    .replace(/-+$/, "");
+    .replace(/[^a-z0-9]+/g, "-");
+
+  while (slug.startsWith("-")) {
+    slug = slug.slice(1);
+  }
+
+  while (slug.endsWith("-")) {
+    slug = slug.slice(0, -1);
+  }
 
   return slug || `${fallbackPrefix}-${Date.now()}`;
 }

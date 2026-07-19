@@ -19,7 +19,7 @@ ENV WORKOUT_PIPER_BINARY=/opt/piper/bin/piper
 ENV WORKOUT_PIPER_MODEL_EN=/opt/piper-voices/en_US-lessac-medium.onnx
 ENV WORKOUT_PIPER_MODEL_FR=/opt/piper-voices/fr_FR-siwis-medium.onnx
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates curl libgomp1 python3 python3-venv \
+  && apt-get install -y --no-install-recommends ca-certificates curl gosu libgomp1 python3 python3-venv \
   && rm -rf /var/lib/apt/lists/* \
   && python3 -m venv /opt/piper \
   && /opt/piper/bin/pip install --no-cache-dir --upgrade pip \
@@ -33,9 +33,12 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/node_modules ./node_modules
 COPY server ./server
 COPY package*.json ./
+COPY docker-entrypoint.sh /usr/local/bin/workout-entrypoint
 RUN mkdir -p /data/tts-cache /data/data/mp3 \
-  && chown -R node:node /data /opt/piper /opt/piper-voices
+  && chown -R node:node /data /opt/piper /opt/piper-voices \
+  && chmod +x /usr/local/bin/workout-entrypoint
 VOLUME ["/data"]
 EXPOSE 8060
 USER node
+ENTRYPOINT ["workout-entrypoint"]
 CMD ["node", "server/index.js"]

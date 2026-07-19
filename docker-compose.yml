@@ -5,6 +5,9 @@ services:
       dockerfile: Dockerfile
     container_name: workout
     restart: unless-stopped
+    # Start the entrypoint as root so it can repair bind-mount ownership,
+    # then it immediately drops privileges before launching Node.
+    user: "0:0"
     ports:
       - "8060:8060"
     environment:

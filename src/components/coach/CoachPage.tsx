@@ -24,6 +24,7 @@ type CoachMessage = {
   provider?: string;
   model?: string;
   cursor?: number;
+  isStreaming?: boolean;
 };
 
 type CoachMessagesResponse = {
@@ -38,6 +39,12 @@ type CoachChatResponse = {
   hasMore?: boolean;
   nextCursor?: number;
 };
+
+type CoachStreamEvent =
+  | { type: "delta"; content: string }
+  | { type: "reset" }
+  | { type: "error"; error: string }
+  | ({ type: "complete" } & CoachChatResponse);
 
 type CoachPageProps = Readonly<{
   onDataChanged: () => void;
@@ -59,6 +66,86 @@ async function apiJson<T>(path: string, options?: RequestInit): Promise<T> {
   }
 
   return response.json() as Promise<T>;
+}
+
+async function streamCoachMessage(
+  language: string,
+  message: string,
+  onDelta: (content: string) => void,
+  onReset: () => void,
+): Promise<CoachChatResponse> {
+  const response = await fetch("/api/coach/chat/stream", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ language, message }),
+  });
+
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(payload?.error ?? `API request failed: ${response.status}`);
+  }
+
+  if (!response.body) {
+    throw new Error(
+      language === "en"
+        ? "The browser did not receive the coach stream."
+        : "Le navigateur n'a pas reçu le flux du coach.",
+    );
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let completedResponse: CoachChatResponse | null = null;
+
+  const processLine = (line: string) => {
+    if (!line.trim()) {
+      return;
+    }
+
+    const event = JSON.parse(line) as CoachStreamEvent;
+
+    if (event.type === "delta") {
+      onDelta(event.content);
+    } else if (event.type === "reset") {
+      onReset();
+    } else if (event.type === "error") {
+      throw new Error(event.error);
+    } else if (event.type === "complete") {
+      completedResponse = event;
+    }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+
+    if (done) {
+      break;
+    }
+
+    buffer += decoder.decode(value, { stream: true });
+    let lineEnd = buffer.indexOf("\n");
+
+    while (lineEnd >= 0) {
+      processLine(buffer.slice(0, lineEnd));
+      buffer = buffer.slice(lineEnd + 1);
+      lineEnd = buffer.indexOf("\n");
+    }
+  }
+
+  buffer += decoder.decode();
+  processLine(buffer);
+
+  if (!completedResponse) {
+    throw new Error(
+      language === "en"
+        ? "The coach stream ended before the response was complete."
+        : "Le flux du coach s'est interrompu avant la fin de la réponse.",
+    );
+  }
+
+  return completedResponse;
 }
 
 export function CoachPage({ onDataChanged }: CoachPageProps) {
@@ -145,19 +232,53 @@ export function CoachPage({ onDataChanged }: CoachPageProps) {
     setError(null);
     setIsSending(true);
 
+    const pendingId = Date.now();
     const optimisticMessage: CoachMessage = {
-      id: `pending-${Date.now()}`,
+      id: `pending-user-${pendingId}`,
       role: "user",
       content: message,
       createdAt: new Date().toISOString(),
     };
-    setMessages((current) => [...current, optimisticMessage]);
+    const optimisticAssistantMessage: CoachMessage = {
+      id: `pending-assistant-${pendingId}`,
+      role: "assistant",
+      content: "",
+      createdAt: new Date().toISOString(),
+      isStreaming: true,
+    };
+    const shouldStream = status?.provider === "openrouter";
+    setMessages((current) => [
+      ...current,
+      optimisticMessage,
+      ...(shouldStream ? [optimisticAssistantMessage] : []),
+    ]);
 
     try {
-      const response = await apiJson<CoachChatResponse>("/api/coach/chat", {
-        method: "POST",
-        body: JSON.stringify({ language, message }),
-      });
+      const response = shouldStream
+        ? await streamCoachMessage(
+            language,
+            message,
+            (content) => {
+              setMessages((current) =>
+                current.map((item) =>
+                  item.id === optimisticAssistantMessage.id
+                    ? { ...item, content: item.content + content }
+                    : item,
+                ),
+              );
+            },
+            () => {
+              setMessages((current) =>
+                current.map((item) =>
+                  item.id === optimisticAssistantMessage.id ? { ...item, content: "" } : item,
+                ),
+              );
+            },
+          )
+        : await apiJson<CoachChatResponse>("/api/coach/chat", {
+            method: "POST",
+            body: JSON.stringify({ language, message }),
+          });
 
       setMessages(filterVisibleMessages(response.messages));
       setHasOlderMessages(visibleSince === null ? Boolean(response.hasMore) : false);
@@ -167,7 +288,12 @@ export function CoachPage({ onDataChanged }: CoachPageProps) {
         onDataChanged();
       }
     } catch (sendError) {
-      setMessages((current) => current.filter((item) => item.id !== optimisticMessage.id));
+      setMessages((current) =>
+        current.filter(
+          (item) =>
+            item.id !== optimisticMessage.id && item.id !== optimisticAssistantMessage.id,
+        ),
+      );
       setDraft(message);
       setError(sendError instanceof Error ? sendError.message : t("coach.errorSend"));
     } finally {
@@ -293,7 +419,15 @@ export function CoachPage({ onDataChanged }: CoachPageProps) {
                             : "border-slate-800 bg-slate-900 text-slate-100"
                         }`}
                       >
-                        {message.content}
+                        {message.content ||
+                          (message.isStreaming ? (
+                            <span
+                              className="animate-pulse text-slate-400"
+                              aria-label={t("coach.sending")}
+                            >
+                              …
+                            </span>
+                          ) : null)}
                       </div>
                       {isUser ? (
                         <span className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-700 bg-slate-900 text-slate-300">

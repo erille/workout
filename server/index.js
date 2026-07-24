@@ -1710,11 +1710,14 @@ function executeCoachTool(name, args, language, userId) {
   throw new Error(`Unsupported coach tool: ${name}`);
 }
 
-async function requestCoachCompletion(config, messages, language) {
-  const endpoint =
-    config.provider === "openrouter"
-      ? "https://openrouter.ai/api/v1/chat/completions"
-      : "https://api.openai.com/v1/chat/completions";
+function coachCompletionEndpoint(config) {
+  return config.provider === "openrouter"
+    ? process.env.OPENROUTER_API_URL?.trim() ||
+        "https://openrouter.ai/api/v1/chat/completions"
+    : "https://api.openai.com/v1/chat/completions";
+}
+
+function coachCompletionHeaders(config) {
   const headers = {
     Authorization: `Bearer ${config.apiKey}`,
     "Content-Type": "application/json",
@@ -1725,32 +1728,66 @@ async function requestCoachCompletion(config, messages, language) {
     headers["X-Title"] = process.env.OPENROUTER_APP_NAME?.trim() || "Workout";
   }
 
+  return headers;
+}
+
+function coachCompletionBody(config, messages, stream = false) {
+  return {
+    model: config.model,
+    messages,
+    tools: coachTools,
+    tool_choice: "auto",
+    temperature: 0.4,
+    max_tokens: coachMaxTokens,
+    ...(stream ? { stream: true } : {}),
+  };
+}
+
+function createCoachRequestController(externalSignal) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), coachRequestTimeoutMs);
+  const abortFromExternalSignal = () => controller.abort();
+
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      controller.abort();
+    } else {
+      externalSignal.addEventListener("abort", abortFromExternalSignal, { once: true });
+    }
+  }
+
+  return {
+    controller,
+    cleanup() {
+      clearTimeout(timeout);
+      externalSignal?.removeEventListener("abort", abortFromExternalSignal);
+    },
+  };
+}
+
+function normalizeCoachRequestError(error, config, language) {
+  if (error instanceof Error && error.name === "AbortError") {
+    return new CoachProviderError(config.provider, 504, "", language);
+  }
+
+  return error;
+}
+
+async function requestCoachCompletion(config, messages, language) {
+  const requestController = createCoachRequestController();
   let apiResponse;
 
   try {
-    apiResponse = await fetch(endpoint, {
+    apiResponse = await fetch(coachCompletionEndpoint(config), {
       method: "POST",
-      headers,
-      signal: controller.signal,
-      body: JSON.stringify({
-        model: config.model,
-        messages,
-        tools: coachTools,
-        tool_choice: "auto",
-        temperature: 0.4,
-        max_tokens: coachMaxTokens,
-      }),
+      headers: coachCompletionHeaders(config),
+      signal: requestController.controller.signal,
+      body: JSON.stringify(coachCompletionBody(config, messages)),
     });
   } catch (error) {
-    if (error instanceof Error && error.name === "AbortError") {
-      throw new CoachProviderError(config.provider, 504, "", language);
-    }
-
-    throw error;
+    throw normalizeCoachRequestError(error, config, language);
   } finally {
-    clearTimeout(timeout);
+    requestController.cleanup();
   }
 
   if (!apiResponse.ok) {
@@ -1768,7 +1805,164 @@ async function requestCoachCompletion(config, messages, language) {
   return message;
 }
 
-async function runCoachConversation(userMessages, language, userId) {
+function parseSseDataBlock(block) {
+  const data = block
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice(5).replace(/^ /, ""))
+    .join("\n");
+
+  return data || null;
+}
+
+async function readSseStream(body, onData) {
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let streamDone = false;
+
+  const consumeBlock = (block) => {
+    const data = parseSseDataBlock(block);
+
+    if (!data) {
+      return;
+    }
+
+    if (data === "[DONE]") {
+      streamDone = true;
+      return;
+    }
+
+    onData(JSON.parse(data));
+  };
+
+  for await (const chunk of body) {
+    buffer += decoder.decode(chunk, { stream: true });
+    let blockEnd = buffer.match(/\r?\n\r?\n/);
+
+    while (blockEnd?.index !== undefined) {
+      consumeBlock(buffer.slice(0, blockEnd.index));
+      buffer = buffer.slice(blockEnd.index + blockEnd[0].length);
+
+      if (streamDone) {
+        return;
+      }
+
+      blockEnd = buffer.match(/\r?\n\r?\n/);
+    }
+  }
+
+  buffer += decoder.decode();
+
+  if (buffer.trim()) {
+    consumeBlock(buffer);
+  }
+}
+
+function appendToolCallDeltas(toolCalls, deltas) {
+  if (!Array.isArray(deltas)) {
+    return;
+  }
+
+  for (const delta of deltas) {
+    const index = Number.isInteger(delta?.index) ? delta.index : toolCalls.length;
+    const toolCall =
+      toolCalls[index] ??
+      {
+        id: "",
+        type: "function",
+        function: { name: "", arguments: "" },
+      };
+
+    if (delta?.id && !toolCall.id) {
+      toolCall.id = delta.id;
+    }
+
+    if (delta?.type) {
+      toolCall.type = delta.type;
+    }
+
+    if (delta?.function?.name) {
+      toolCall.function.name += delta.function.name;
+    }
+
+    if (delta?.function?.arguments) {
+      toolCall.function.arguments += delta.function.arguments;
+    }
+
+    toolCalls[index] = toolCall;
+  }
+}
+
+async function requestStreamingCoachCompletion(
+  config,
+  messages,
+  language,
+  onContentDelta,
+  externalSignal,
+) {
+  const requestController = createCoachRequestController(externalSignal);
+  let apiResponse;
+
+  try {
+    apiResponse = await fetch(coachCompletionEndpoint(config), {
+      method: "POST",
+      headers: coachCompletionHeaders(config),
+      signal: requestController.controller.signal,
+      body: JSON.stringify(coachCompletionBody(config, messages, true)),
+    });
+
+    if (!apiResponse.ok) {
+      const errorText = await apiResponse.text();
+      throw new CoachProviderError(config.provider, apiResponse.status, errorText, language);
+    }
+
+    if (!apiResponse.body) {
+      throw new Error("Coach provider returned no response stream.");
+    }
+
+    const assistantMessage = {
+      role: "assistant",
+      content: "",
+      tool_calls: [],
+    };
+
+    await readSseStream(apiResponse.body, (payload) => {
+      if (payload?.error) {
+        throw new CoachProviderError(
+          config.provider,
+          Number(payload.error.code) || 502,
+          JSON.stringify(payload.error),
+          language,
+        );
+      }
+
+      const delta = payload?.choices?.[0]?.delta;
+
+      if (!delta) {
+        return;
+      }
+
+      if (typeof delta.content === "string" && delta.content) {
+        assistantMessage.content += delta.content;
+        onContentDelta?.(delta.content);
+      }
+
+      appendToolCallDeltas(assistantMessage.tool_calls, delta.tool_calls);
+    });
+
+    if (!assistantMessage.content && assistantMessage.tool_calls.length === 0) {
+      throw new Error("Coach provider returned no message.");
+    }
+
+    return assistantMessage;
+  } catch (error) {
+    throw normalizeCoachRequestError(error, config, language);
+  } finally {
+    requestController.cleanup();
+  }
+}
+
+async function runCoachConversation(userMessages, language, userId, streamOptions) {
   const config = getCoachConfig();
 
   if (!config.enabled) {
@@ -1794,14 +1988,27 @@ async function runCoachConversation(userMessages, language, userId) {
     let assistantMessage;
 
     try {
-      assistantMessage = await requestCoachCompletion(config, messages, language);
+      assistantMessage =
+        config.provider === "openrouter" && streamOptions
+          ? await requestStreamingCoachCompletion(
+              config,
+              messages,
+              language,
+              streamOptions.onContentDelta,
+              streamOptions.signal,
+            )
+          : await requestCoachCompletion(config, messages, language);
     } catch (error) {
       if (dataChanged) {
+        const content =
+          language === "en"
+            ? "I updated your workout data, but the coach provider timed out before I could generate the final explanation. Refresh the app data if the new item is not visible yet."
+            : "J'ai mis à jour tes données d'entraînement, mais le fournisseur du coach a expiré avant de générer l'explication finale. Rafraîchis les données si le nouvel élément n'est pas encore visible.";
+        streamOptions?.onReset?.();
+        streamOptions?.onContentDelta?.(content);
+
         return {
-          content:
-            language === "en"
-              ? "I updated your workout data, but the coach provider timed out before I could generate the final explanation. Refresh the app data if the new item is not visible yet."
-              : "J'ai mis à jour tes données d'entraînement, mais le fournisseur du coach a expiré avant de générer l'explication finale. Rafraîchis les données si le nouvel élément n'est pas encore visible.",
+          content,
           dataChanged,
           provider: config.provider,
           model: config.model,
@@ -1816,17 +2023,23 @@ async function runCoachConversation(userMessages, language, userId) {
       : [];
 
     if (toolCalls.length === 0) {
+      const streamedContent =
+        typeof assistantMessage.content === "string" ? assistantMessage.content.trim() : "";
+      const content = streamedContent || "Je n'ai pas pu générer une réponse exploitable.";
+
+      if (!streamedContent) {
+        streamOptions?.onContentDelta?.(content);
+      }
+
       return {
-        content:
-          typeof assistantMessage.content === "string" && assistantMessage.content.trim()
-            ? assistantMessage.content.trim()
-            : "Je n'ai pas pu générer une réponse exploitable.",
+        content,
         dataChanged,
         provider: config.provider,
         model: config.model,
       };
     }
 
+    streamOptions?.onReset?.();
     messages.push({
       role: "assistant",
       content: assistantMessage.content ?? "",
@@ -1848,8 +2061,11 @@ async function runCoachConversation(userMessages, language, userId) {
         });
 
         if (toolName === "create_build" && toolResult.result?.plan) {
+          const content = summarizeCreatedBuild(toolResult.result.plan, language);
+          streamOptions?.onContentDelta?.(content);
+
           return {
-            content: summarizeCreatedBuild(toolResult.result.plan, language),
+            content,
             dataChanged,
             provider: config.provider,
             model: config.model,
@@ -1868,12 +2084,36 @@ async function runCoachConversation(userMessages, language, userId) {
     }
   }
 
+  const content =
+    "J'ai atteint la limite d'actions pour cette réponse. Essaie de reformuler en une demande plus courte.";
+  streamOptions?.onReset?.();
+  streamOptions?.onContentDelta?.(content);
+
   return {
-    content: "J'ai atteint la limite d'actions pour cette réponse. Essaie de reformuler en une demande plus courte.",
+    content,
     dataChanged,
     provider: config.provider,
     model: config.model,
   };
+}
+
+function startCoachStreamResponse(response) {
+  response.writeHead(200, {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Methods": "GET,POST,PUT,OPTIONS",
+    "Access-Control-Allow-Credentials": "true",
+    "Content-Type": "application/x-ndjson; charset=utf-8",
+    "Cache-Control": "no-cache, no-transform",
+    "X-Accel-Buffering": "no",
+  });
+  response.flushHeaders?.();
+}
+
+function writeCoachStreamEvent(response, event) {
+  if (!response.destroyed && !response.writableEnded) {
+    response.write(`${JSON.stringify(event)}\n`);
+  }
 }
 
 async function handleCoachApi(request, response, pathname, userId) {
@@ -1903,6 +2143,84 @@ async function handleCoachApi(request, response, pathname, userId) {
   if (request.method === "POST" && pathname === "/api/coach/clear") {
     clearCoachMessages(userId);
     jsonResponse(response, 200, { messages: [], hasMore: false });
+    return true;
+  }
+
+  if (request.method === "POST" && pathname === "/api/coach/chat/stream") {
+    if (!config.enabled) {
+      jsonResponse(response, 503, {
+        error: config.reason ?? "Coach provider is not configured.",
+        enabled: false,
+      });
+      return true;
+    }
+
+    if (config.provider !== "openrouter") {
+      jsonResponse(response, 400, {
+        error: "Streaming is currently available only with OpenRouter.",
+      });
+      return true;
+    }
+
+    const body = await readBody(request);
+    const content = typeof body?.message === "string" ? body.message.trim() : "";
+    const language = body?.language === "en" ? "en" : "fr";
+
+    if (!content) {
+      jsonResponse(response, 400, { error: "Message is required." });
+      return true;
+    }
+
+    const conversation = [
+      ...readCoachMessages(userId, 29),
+      {
+        id: createId("coach-message"),
+        role: "user",
+        content,
+        createdAt: new Date().toISOString(),
+        provider: config.provider,
+        model: config.model,
+      },
+    ];
+    const downstreamAbort = new AbortController();
+    const abortOnDisconnect = () => {
+      if (!response.writableEnded) {
+        downstreamAbort.abort();
+      }
+    };
+    response.once("close", abortOnDisconnect);
+    startCoachStreamResponse(response);
+
+    try {
+      const result = await runCoachConversation(conversation, language, userId, {
+        signal: downstreamAbort.signal,
+        onContentDelta: (delta) =>
+          writeCoachStreamEvent(response, { type: "delta", content: delta }),
+        onReset: () => writeCoachStreamEvent(response, { type: "reset" }),
+      });
+      writeCoachMessage(userId, "user", content, config.provider, config.model);
+      writeCoachMessage(userId, "assistant", result.content, result.provider, result.model);
+
+      writeCoachStreamEvent(response, {
+        type: "complete",
+        message: result.content,
+        ...readCoachMessagePage(userId),
+        dataChanged: result.dataChanged,
+        provider: result.provider,
+        model: result.model,
+      });
+    } catch (error) {
+      writeCoachStreamEvent(response, {
+        type: "error",
+        error: error instanceof Error ? error.message : "Server error",
+      });
+    } finally {
+      response.off("close", abortOnDisconnect);
+
+      if (!response.destroyed && !response.writableEnded) {
+        response.end();
+      }
+    }
     return true;
   }
 

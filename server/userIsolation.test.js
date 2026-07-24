@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { createServer as createHttpServer } from "node:http";
 import { createServer as createNetServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -133,6 +134,124 @@ async function apiRequest(baseUrl, path, options = {}) {
     cookie: response.headers.get("set-cookie")?.split(";")[0],
     payload,
     status: response.status,
+  };
+}
+
+async function streamingApiRequest(baseUrl, path, options = {}) {
+  const response = await fetch(`${baseUrl}${path}`, {
+    method: options.method ?? "POST",
+    headers: {
+      ...(options.cookie ? { Cookie: options.cookie } : {}),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(options.body),
+  });
+  const raw = await response.text();
+
+  return {
+    events: raw
+      .split("\n")
+      .filter((line) => line.trim())
+      .map((line) => JSON.parse(line)),
+    status: response.status,
+  };
+}
+
+async function startMockOpenRouter() {
+  const requests = [];
+  const server = createHttpServer((request, response) => {
+    let raw = "";
+
+    request.on("data", (chunk) => {
+      raw += chunk;
+    });
+    request.on("end", async () => {
+      const payload = JSON.parse(raw);
+      requests.push({ headers: request.headers, payload });
+      const lastUserMessage = [...payload.messages]
+        .reverse()
+        .find((message) => message.role === "user")?.content;
+      const sseEvents =
+        lastUserMessage === "Crée mon programme streamé"
+          ? [
+              ": OPENROUTER PROCESSING\r\n\r\n",
+              `data: ${JSON.stringify({
+                choices: [{ delta: { content: "Je prépare le programme." } }],
+              })}\r\n\r\n`,
+              `data: ${JSON.stringify({
+                choices: [
+                  {
+                    delta: {
+                      tool_calls: [
+                        {
+                          index: 0,
+                          id: "call-stream-build",
+                          type: "function",
+                          function: {
+                            name: "create_",
+                            arguments:
+                              '{"name":"Flux Jee","rounds":2,"steps":[{"exerciseId":"exercise-push-up",',
+                          },
+                        },
+                      ],
+                    },
+                  },
+                ],
+              })}\r\n\r\n`,
+              `data: ${JSON.stringify({
+                choices: [
+                  {
+                    delta: {
+                      tool_calls: [
+                        {
+                          index: 0,
+                          function: {
+                            name: "build",
+                            arguments:
+                              '"type":"reps","reps":12,"breakSeconds":30}]}',
+                          },
+                        },
+                      ],
+                    },
+                  },
+                ],
+              })}\r\n\r\n`,
+              "data: [DONE]\r\n\r\n",
+            ]
+          : [
+              ": OPENROUTER PROCESSING\r\n\r\n",
+              `data: ${JSON.stringify({
+                choices: [{ delta: { content: "Bonjour " } }],
+              })}\r\n\r\n`,
+              `data: ${JSON.stringify({
+                choices: [{ delta: { content: "Jee" } }],
+              })}\r\n\r\n`,
+              "data: [DONE]\r\n\r\n",
+            ];
+
+      response.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+      });
+
+      for (const event of sseEvents) {
+        const splitAt = Math.max(1, Math.floor(event.length / 2));
+        response.write(event.slice(0, splitAt));
+        await new Promise((resolveWait) => setTimeout(resolveWait, 2));
+        response.write(event.slice(splitAt));
+      }
+
+      response.end();
+    });
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+
+  return {
+    requests,
+    server,
+    url: `http://127.0.0.1:${typeof address === "object" && address ? address.port : 0}`,
   };
 }
 
@@ -299,6 +418,131 @@ test("migrates legacy owner data and isolates the partner account", async () => 
     if (child.exitCode === null) {
       await once(child, "exit");
     }
+    rmSync(testDir, { force: true, recursive: true });
+  }
+});
+
+test("streams OpenRouter text and rebuilds fragmented tool calls for the signed-in user", async () => {
+  const testDir = mkdtempSync(join(tmpdir(), "workout-openrouter-stream-"));
+  const dbPath = join(testDir, "workout.sqlite");
+  const mockOpenRouter = await startMockOpenRouter();
+  const [ownerPasswordHash, partnerPasswordHash, port] = await Promise.all([
+    argon2.hash("owner-stream-password"),
+    argon2.hash("partner-stream-password"),
+    availablePort(),
+  ]);
+  const child = spawn(process.execPath, ["server/index.js"], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      PORT: String(port),
+      WORKOUT_AUTH_SECRET: "stream-integration-test-auth-secret",
+      WORKOUT_DB_PATH: dbPath,
+      WORKOUT_OWNER_LOGIN: "ketah",
+      WORKOUT_OWNER_PASSWORD_HASH: ownerPasswordHash,
+      WORKOUT_PARTNER_LOGIN: "Jee",
+      WORKOUT_PARTNER_PASSWORD_HASH: partnerPasswordHash,
+      WORKOUT_PUBLIC_DIR: testDir,
+      COACH_PROVIDER: "openrouter",
+      OPENROUTER_API_KEY: "test-openrouter-key",
+      OPENROUTER_MODEL: "test/stream-model",
+      OPENROUTER_API_URL: `${mockOpenRouter.url}/api/v1/chat/completions`,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let serverOutput = "";
+  child.stdout.on("data", (chunk) => {
+    serverOutput += chunk.toString();
+  });
+  child.stderr.on("data", (chunk) => {
+    serverOutput += chunk.toString();
+  });
+
+  try {
+    const baseUrl = `http://127.0.0.1:${port}`;
+    await waitForServer(baseUrl, child);
+
+    const partnerLogin = await apiRequest(baseUrl, "/api/auth/login", {
+      method: "POST",
+      body: { login: "jee", password: "partner-stream-password" },
+    });
+    assert.equal(partnerLogin.status, 200);
+    const initialPartnerData = await apiRequest(baseUrl, "/api/data", {
+      cookie: partnerLogin.cookie,
+    });
+    assert.equal(initialPartnerData.payload.exercises.length, defaultExercises.length);
+
+    const textStream = await streamingApiRequest(baseUrl, "/api/coach/chat/stream", {
+      cookie: partnerLogin.cookie,
+      body: { language: "fr", message: "Dis-moi bonjour" },
+    });
+    assert.equal(textStream.status, 200);
+    assert.deepEqual(
+      textStream.events
+        .filter((event) => event.type === "delta")
+        .map((event) => event.content),
+      ["Bonjour ", "Jee"],
+    );
+    const textComplete = textStream.events.find((event) => event.type === "complete");
+    assert.ok(textComplete);
+    assert.equal(textComplete.message, "Bonjour Jee");
+    assert.equal(textComplete.messages.at(-1).content, "Bonjour Jee");
+
+    const buildStream = await streamingApiRequest(baseUrl, "/api/coach/chat/stream", {
+      cookie: partnerLogin.cookie,
+      body: { language: "fr", message: "Crée mon programme streamé" },
+    });
+    assert.equal(buildStream.status, 200);
+    assert.deepEqual(
+      buildStream.events.slice(0, 2).map((event) => event.type),
+      ["delta", "reset"],
+    );
+    const buildComplete = buildStream.events.find((event) => event.type === "complete");
+    assert.ok(buildComplete);
+    assert.equal(buildComplete.dataChanged, true);
+    assert.match(buildComplete.message, /J'ai créé la séance "Flux Jee"/);
+
+    const [partnerData, ownerLogin] = await Promise.all([
+      apiRequest(baseUrl, "/api/data", { cookie: partnerLogin.cookie }),
+      apiRequest(baseUrl, "/api/auth/login", {
+        method: "POST",
+        body: { login: "ketah", password: "owner-stream-password" },
+      }),
+    ]);
+    assert.deepEqual(
+      partnerData.payload.plans.map((plan) => plan.name),
+      ["Flux Jee"],
+    );
+    assert.equal(partnerData.payload.plans[0].steps[0].reps, 12);
+
+    const ownerData = await apiRequest(baseUrl, "/api/data", {
+      cookie: ownerLogin.cookie,
+    });
+    assert.deepEqual(ownerData.payload.plans, []);
+
+    const savedMessages = await apiRequest(baseUrl, "/api/coach/messages", {
+      cookie: partnerLogin.cookie,
+    });
+    assert.deepEqual(
+      savedMessages.payload.messages.map((message) => message.role),
+      ["user", "assistant", "user", "assistant"],
+    );
+    assert.equal(mockOpenRouter.requests.length, 2);
+    assert.ok(mockOpenRouter.requests.every(({ payload }) => payload.stream === true));
+    assert.ok(
+      mockOpenRouter.requests.every(
+        ({ headers }) => headers.authorization === "Bearer test-openrouter-key",
+      ),
+    );
+  } catch (error) {
+    throw new Error(`${error instanceof Error ? error.message : error}\n${serverOutput}`);
+  } finally {
+    child.kill("SIGTERM");
+    if (child.exitCode === null) {
+      await once(child, "exit");
+    }
+    mockOpenRouter.server.close();
+    await once(mockOpenRouter.server, "close");
     rmSync(testDir, { force: true, recursive: true });
   }
 });

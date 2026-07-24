@@ -177,6 +177,11 @@ OPENROUTER_SITE_URL=https://your-workout-domain.example
 OPENROUTER_APP_NAME=Workout
 ```
 
+With OpenRouter, Coach responses are streamed progressively in the interface. Workout keeps the
+provider connection on the server, reconstructs any streamed tool calls before executing them,
+and saves only the completed user/assistant messages to SQLite. The stream response also disables
+common reverse-proxy buffering through its response headers.
+
 The selected provider/model can be changed later because coach instructions, app data, and chat history are stored by Workout, not by the model provider.
 
 `COACH_REQUEST_TIMEOUT_MS` defaults to 45 seconds so a slow provider fails before a typical HTTPS reverse proxy returns a generic 504. Free OpenRouter models can still be unavailable or slow during busy periods; if this happens repeatedly, choose a faster model or raise both this timeout and your reverse proxy timeout.
@@ -271,6 +276,7 @@ The seed command creates 3 demo plans and 11 completed sessions. It replaces onl
 | `GET /api/coach/status` | Private when login is enabled | Check virtual coach provider configuration |
 | `GET /api/coach/messages` | Private when login is enabled | Load saved coach chat history |
 | `POST /api/coach/chat` | Private when login is enabled | Send a coach message and allow validated app tools |
+| `POST /api/coach/chat/stream` | Private when login is enabled | Stream an OpenRouter coach response and allow validated app tools |
 | `POST /api/coach/clear` | Private when login is enabled | Clear coach chat history |
 | `PUT /api/exercises` | Private when login is enabled | Save exercises |
 | `PUT /api/plans` | Private when login is enabled | Save workout plans |

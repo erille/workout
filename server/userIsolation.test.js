@@ -474,7 +474,7 @@ test("streams OpenRouter text and rebuilds fragmented tool calls for the signed-
 
     const textStream = await streamingApiRequest(baseUrl, "/api/coach/chat/stream", {
       cookie: partnerLogin.cookie,
-      body: { language: "fr", message: "Dis-moi bonjour" },
+      body: { language: "en", message: "Dis-moi bonjour" },
     });
     assert.equal(textStream.status, 200);
     assert.deepEqual(
@@ -490,7 +490,7 @@ test("streams OpenRouter text and rebuilds fragmented tool calls for the signed-
 
     const buildStream = await streamingApiRequest(baseUrl, "/api/coach/chat/stream", {
       cookie: partnerLogin.cookie,
-      body: { language: "fr", message: "Crée mon programme streamé" },
+      body: { language: "en", message: "Crée mon programme streamé" },
     });
     assert.equal(buildStream.status, 200);
     assert.deepEqual(
@@ -529,6 +529,19 @@ test("streams OpenRouter text and rebuilds fragmented tool calls for the signed-
     );
     assert.equal(mockOpenRouter.requests.length, 2);
     assert.ok(mockOpenRouter.requests.every(({ payload }) => payload.stream === true));
+    assert.ok(
+      mockOpenRouter.requests.every(
+        ({ payload }) => payload.reasoning?.exclude === true,
+      ),
+    );
+    assert.match(
+      mockOpenRouter.requests[0].payload.messages[0].content,
+      /Always answer in French/,
+    );
+    assert.match(
+      mockOpenRouter.requests[0].payload.messages[0].content,
+      /Never reveal chain-of-thought/,
+    );
     assert.ok(
       mockOpenRouter.requests.every(
         ({ headers }) => headers.authorization === "Bearer test-openrouter-key",

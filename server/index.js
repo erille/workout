@@ -1009,11 +1009,12 @@ function clearCoachMessages(userId) {
   db.prepare("DELETE FROM coach_messages WHERE user_id = ?").run(userId);
 }
 
-function createCoachSystemPrompt(language) {
-  const responseLanguage = language === "en" ? "English" : "French";
-
+function createCoachSystemPrompt() {
   return [
-    `You are the virtual workout coach inside the Workout app. Answer in ${responseLanguage}.`,
+    "You are the virtual workout coach inside the Workout app. Always answer in French, regardless of the language used by the user or in the recent chat history.",
+    "Return only the final answer addressed directly to the user. Never reveal chain-of-thought, internal reasoning, hidden analysis, planning notes, conversation review, or phrases such as 'the user said', 'let me think', or 'I should respond'.",
+    "Some previous assistant messages may contain unwanted meta-analysis. Treat those messages as mistakes: use their factual context when useful, but never imitate their wording or reasoning style.",
+    "For greetings and simple questions, answer naturally in no more than four short sentences. Give additional detail only when it is useful for a workout plan, exercise instructions, safety, or an explicit user request.",
     "Be practical, concise, encouraging, and specific. Use the user's app data through tools before giving plans or progress advice.",
     "You receive the recent Coach chat history in the conversation. Use it to preserve context, remember prior user preferences, avoid repeating questions, and keep continuity across the coaching discussion.",
     "Treat Workout app data as the source of truth for activity, Builds, exercises, categories, profile, and measurements. If required information is missing, ask a short clarification instead of inventing details.",
@@ -1739,6 +1740,7 @@ function coachCompletionBody(config, messages, stream = false) {
     tool_choice: "auto",
     temperature: 0.4,
     max_tokens: coachMaxTokens,
+    ...(config.provider === "openrouter" ? { reasoning: { exclude: true } } : {}),
     ...(stream ? { stream: true } : {}),
   };
 }
@@ -1970,7 +1972,7 @@ async function runCoachConversation(userMessages, language, userId, streamOption
   }
 
   const messages = [
-    { role: "system", content: createCoachSystemPrompt(language) },
+    { role: "system", content: createCoachSystemPrompt() },
     {
       role: "system",
       content: `Current Workout app data snapshot as JSON:\n${JSON.stringify(
@@ -2164,7 +2166,7 @@ async function handleCoachApi(request, response, pathname, userId) {
 
     const body = await readBody(request);
     const content = typeof body?.message === "string" ? body.message.trim() : "";
-    const language = body?.language === "en" ? "en" : "fr";
+    const language = "fr";
 
     if (!content) {
       jsonResponse(response, 400, { error: "Message is required." });
@@ -2235,7 +2237,7 @@ async function handleCoachApi(request, response, pathname, userId) {
 
     const body = await readBody(request);
     const content = typeof body?.message === "string" ? body.message.trim() : "";
-    const language = body?.language === "en" ? "en" : "fr";
+    const language = "fr";
 
     if (!content) {
       jsonResponse(response, 400, { error: "Message is required." });

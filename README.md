@@ -179,8 +179,9 @@ OPENROUTER_APP_NAME=Workout
 
 With OpenRouter, Coach responses are streamed progressively in the interface. Workout keeps the
 provider connection on the server, reconstructs any streamed tool calls before executing them,
-and saves only the completed user/assistant messages to SQLite. The stream response also disables
-common reverse-proxy buffering through its response headers.
+excludes provider reasoning from the visible response, and saves only the completed
+user/assistant messages to SQLite. The Coach always answers in French. The stream response also
+disables common reverse-proxy buffering through its response headers.
 
 The selected provider/model can be changed later because coach instructions, app data, and chat history are stored by Workout, not by the model provider.
 

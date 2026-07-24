@@ -10,6 +10,7 @@ const defaultStatus: AuthStatus = {
   apiAvailable: false,
   authEnabled: false,
   authenticated: false,
+  user: null,
 };
 
 export function useAuth() {
@@ -36,8 +37,8 @@ export function useAuth() {
     };
   }, []);
 
-  const login = useCallback(async (password: string) => {
-    const nextStatus = await loginRequest(password);
+  const login = useCallback(async (loginName: string, password: string) => {
+    const nextStatus = await loginRequest(loginName, password);
     setStatus(nextStatus);
   }, []);
 

@@ -33,6 +33,7 @@ export type PageId =
 
 type NavigationProps = Readonly<{
   authEnabled: boolean;
+  currentUserLogin?: string;
   currentPage: PageId;
   isAuthenticated: boolean;
   language: Language;
@@ -56,6 +57,7 @@ const navItems = [
 
 export function Navigation({
   authEnabled,
+  currentUserLogin,
   currentPage,
   isAuthenticated,
   language,
@@ -136,7 +138,7 @@ export function Navigation({
           </a>
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-md border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm font-semibold text-slate-300">
-              {modeLabel}
+              {currentUserLogin ? `${modeLabel} · ${currentUserLogin}` : modeLabel}
             </span>
             <div ref={aboutRef} className="relative">
               <button

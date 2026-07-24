@@ -9,7 +9,7 @@
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=fff)](https://www.docker.com/)
 [![Last commit](https://img.shields.io/github/last-commit/erille/workout?logo=github)](https://github.com/erille/workout)
 
-Workout is a local-first web app for building, running, and tracking workout sessions. It works as a public guest tool in the browser, and can also unlock a private SQLite-backed mode with a simple password.
+Workout is a local-first web app for building, running, and tracking workout sessions. It works as a public guest tool in the browser, and can also unlock isolated SQLite-backed user spaces with a login and password.
 
 ## Features
 
@@ -29,7 +29,7 @@ Workout is a local-first web app for building, running, and tracking workout ses
 - Guest mode using browser localStorage.
 - Local mode JSON export/import for moving browser data between devices.
 - Private mode using SQLite through the Node API.
-- Password login with Argon2 hash support.
+- Two-user login with Argon2 hash support and isolated private data.
 - PWA install support with basic static app-shell caching.
 - Docker deployment on port `8060`.
 
@@ -40,10 +40,10 @@ Workout has two separated storage modes:
 | Mode | Who uses it | Storage | Privacy behavior |
 | --- | --- | --- | --- |
 | Local mode | Visitors before login | Browser localStorage under `workout.guest.*` | Never reads private API data |
-| Private mode | Logged-in owner | SQLite through `/api` | Protected by password session cookie |
+| Private mode | Logged-in configured user | SQLite through `/api` | Protected by login/password session cookie and isolated by user |
 | Server mode | No password configured | SQLite through `/api` | API is open on the deployed app |
 
-Guest/local data is not automatically imported into the private database. This keeps visitor experiments separate from the owner database.
+Guest/local data is not automatically imported into the private database. This keeps visitor experiments separate from each configured user's database records.
 
 Local mode includes JSON export/import from the top navigation so browser-only data can be backed up or moved to another browser.
 
@@ -102,6 +102,7 @@ http://localhost:8060
 | --- | --- |
 | `npm run dev` | Start the Vite development server |
 | `npm run build` | Type-check and build the production frontend |
+| `npm test` | Run the user migration and data-isolation integration test |
 | `npm start` | Serve `dist` and the API with Node |
 | `npm run preview` | Alias for the production Node server |
 | `npm run api` | Run the Node API/static server |
@@ -109,7 +110,9 @@ http://localhost:8060
 
 ## Authentication
 
-Login is enabled only when `WORKOUT_PASSWORD_HASH` is set in `.env` or the server environment.
+Login is enabled when at least the owner password hash is configured. Workout supports one owner
+and one partner account, both declared through environment variables. Logins are matched without
+case sensitivity.
 
 Generate an Argon2 hash with Python:
 
@@ -126,13 +129,23 @@ node --input-type=module -e "import argon2 from 'argon2'; import readline from '
 Create `.env`:
 
 ```text
-WORKOUT_PASSWORD_HASH='$argon2id$...'
+WORKOUT_OWNER_LOGIN=ketah
+WORKOUT_OWNER_PASSWORD_HASH='$argon2id$...'
+WORKOUT_PARTNER_LOGIN=Jee
+WORKOUT_PARTNER_PASSWORD_HASH='$argon2id$...'
 WORKOUT_AUTH_SECRET=replace-with-a-long-random-string
 ```
 
-Quote `WORKOUT_PASSWORD_HASH` because Argon2 hashes contain `$`.
+Quote password hashes because Argon2 hashes contain `$`. Existing deployments may keep
+`WORKOUT_PASSWORD_HASH`: it remains a fallback for `WORKOUT_OWNER_PASSWORD_HASH`.
 
-`WORKOUT_AUTH_SECRET` signs the HTTP-only session cookie. If it is omitted, the password hash is used as the signing secret.
+`WORKOUT_AUTH_SECRET` signs the HTTP-only session cookie. If it is omitted, a configured password
+hash is used as the signing secret.
+
+On the first startup after upgrading an existing database, Workout creates a timestamped
+`workout.pre-users.*.sqlite` backup next to the active database. Existing exercises, Builds,
+history, settings, profile, and Coach messages are assigned to the owner account. The partner
+account starts with the default exercises and an empty profile and history.
 
 Generate a random cookie secret with Node:
 
@@ -248,7 +261,7 @@ The seed command creates 3 demo plans and 11 completed sessions. It replaces onl
 | --- | --- | --- |
 | `GET /api/health` | Public | Health check |
 | `GET /api/auth/status` | Public | Check auth/session status |
-| `POST /api/auth/login` | Public | Verify password and set session cookie |
+| `POST /api/auth/login` | Public | Verify login/password and set a user-scoped session cookie |
 | `POST /api/auth/logout` | Public | Clear session cookie |
 | `GET /api/data` | Private when login is enabled | Load all app data |
 | `POST /api/import` | Private when login is enabled | Replace all app data |

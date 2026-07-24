@@ -112,12 +112,14 @@ export default function App() {
     });
   };
 
-  const handleLogin = async (password: string) => {
-    await login(password);
+  const handleLogin = async (loginName: string, password: string) => {
+    invalidateServerDataCache();
+    await login(loginName, password);
     setIsLoginOpen(false);
   };
 
   const handleLogout = async () => {
+    invalidateServerDataCache();
     await logout();
     setActivePlan(null);
   };
@@ -140,6 +142,7 @@ export default function App() {
               authEnabled={authStatus.authEnabled}
               currentPage={currentPage}
               isAuthenticated={authStatus.authenticated}
+              currentUserLogin={authStatus.user?.login}
               language={language}
               storageMode={storageMode}
               onLanguageToggle={toggleLanguage}

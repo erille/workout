@@ -1,7 +1,13 @@
+export type AuthUser = {
+  id: string;
+  login: string;
+};
+
 export type AuthStatus = {
   apiAvailable: boolean;
   authEnabled: boolean;
   authenticated: boolean;
+  user: AuthUser | null;
 };
 
 async function authRequest<T>(path: string, options?: RequestInit): Promise<T> {
@@ -33,14 +39,15 @@ export async function getAuthStatus(): Promise<AuthStatus> {
       apiAvailable: false,
       authEnabled: false,
       authenticated: true,
+      user: null,
     };
   }
 }
 
-export async function login(password: string): Promise<AuthStatus> {
+export async function login(login: string, password: string): Promise<AuthStatus> {
   const status = await authRequest<Omit<AuthStatus, "apiAvailable">>("/api/auth/login", {
     method: "POST",
-    body: JSON.stringify({ password }),
+    body: JSON.stringify({ login, password }),
   });
   return {
     ...status,

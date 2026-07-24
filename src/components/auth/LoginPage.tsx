@@ -4,11 +4,12 @@ import { useI18n } from "../../i18n/I18nContext";
 
 type LoginPageProps = Readonly<{
   onCancel: () => void;
-  onLogin: (password: string) => Promise<void>;
+  onLogin: (login: string, password: string) => Promise<void>;
 }>;
 
 export function LoginPage({ onCancel, onLogin }: LoginPageProps) {
   const { t } = useI18n();
+  const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -19,7 +20,7 @@ export function LoginPage({ onCancel, onLogin }: LoginPageProps) {
     setIsSubmitting(true);
 
     try {
-      await onLogin(password);
+      await onLogin(login, password);
     } catch (loginError) {
       setError(
         loginError instanceof Error && loginError.message === "401"
@@ -50,11 +51,22 @@ export function LoginPage({ onCancel, onLogin }: LoginPageProps) {
         </div>
 
         <label className="block space-y-2">
+          <span className="label">{t("auth.username")}</span>
+          <input
+            className="field text-base"
+            autoComplete="username"
+            autoFocus
+            placeholder={t("auth.usernamePlaceholder")}
+            value={login}
+            onChange={(event) => setLogin(event.target.value)}
+          />
+        </label>
+
+        <label className="block space-y-2">
           <span className="label">{t("auth.password")}</span>
           <input
             className="field text-base"
             autoComplete="current-password"
-            autoFocus
             placeholder={t("auth.passwordPlaceholder")}
             type="password"
             value={password}
@@ -68,7 +80,11 @@ export function LoginPage({ onCancel, onLogin }: LoginPageProps) {
           </div>
         ) : null}
 
-        <button type="submit" className="primary-button min-h-12 w-full" disabled={isSubmitting}>
+        <button
+          type="submit"
+          className="primary-button min-h-12 w-full"
+          disabled={isSubmitting || !login.trim() || !password}
+        >
           <LogIn aria-hidden="true" size={18} />
           {t("auth.login")}
         </button>

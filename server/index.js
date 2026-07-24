@@ -63,9 +63,49 @@ const musicDirCandidates = [
   resolve(join(dirname(dbPath), "mp3")),
   resolve(join("data", "mp3")),
 ].filter(Boolean);
-const passwordHash = process.env.WORKOUT_PASSWORD_HASH?.trim() || "";
-const authEnabled = passwordHash.length > 0;
-const authSecret = process.env.WORKOUT_AUTH_SECRET?.trim() || passwordHash || "workout-dev-secret";
+const ownerUserId = "owner";
+const partnerUserId = "partner";
+const ownerLogin = process.env.WORKOUT_OWNER_LOGIN?.trim() || "ketah";
+const partnerLogin = process.env.WORKOUT_PARTNER_LOGIN?.trim() || "Jee";
+const ownerPasswordHash =
+  process.env.WORKOUT_OWNER_PASSWORD_HASH?.trim() ||
+  process.env.WORKOUT_PASSWORD_HASH?.trim() ||
+  "";
+const partnerPasswordHash = process.env.WORKOUT_PARTNER_PASSWORD_HASH?.trim() || "";
+
+if (partnerPasswordHash && !ownerPasswordHash) {
+  throw new Error(
+    "WORKOUT_OWNER_PASSWORD_HASH (or legacy WORKOUT_PASSWORD_HASH) is required when a partner account is configured.",
+  );
+}
+
+if (
+  ownerPasswordHash &&
+  partnerPasswordHash &&
+  ownerLogin.localeCompare(partnerLogin, undefined, { sensitivity: "accent" }) === 0
+) {
+  throw new Error("Owner and partner logins must be different.");
+}
+
+const configuredUsers = [
+  ...(ownerPasswordHash
+    ? [{ id: ownerUserId, login: ownerLogin, passwordHash: ownerPasswordHash }]
+    : []),
+  ...(partnerPasswordHash
+    ? [{ id: partnerUserId, login: partnerLogin, passwordHash: partnerPasswordHash }]
+    : []),
+];
+const ownerUser = {
+  id: ownerUserId,
+  login: ownerLogin,
+  passwordHash: ownerPasswordHash,
+};
+const authEnabled = configuredUsers.length > 0;
+const authSecret =
+  process.env.WORKOUT_AUTH_SECRET?.trim() ||
+  ownerPasswordHash ||
+  partnerPasswordHash ||
+  "workout-dev-secret";
 const sessionCookieName = "workout_session";
 const sessionMaxAgeSeconds = 60 * 60 * 24 * 7;
 const allowedTables = new Set(["exercises", "plans", "sessions"]);
@@ -87,6 +127,7 @@ const coachMaxTokens = readIntegerEnv("COACH_MAX_TOKENS", 1200, 256, 4096);
 
 mkdirSync(dirname(dbPath), { recursive: true });
 
+const databaseExistedBeforeStartup = existsSync(dbPath);
 const db = new DatabaseSync(dbPath);
 db.exec(`
   PRAGMA journal_mode = WAL;
@@ -124,6 +165,140 @@ db.exec(`
     model TEXT
   );
 `);
+
+function hasTable(table) {
+  return Boolean(
+    db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table),
+  );
+}
+
+function hasColumn(table, column) {
+  return db
+    .prepare(`PRAGMA table_info(${table})`)
+    .all()
+    .some((entry) => entry.name === column);
+}
+
+function hasUserScopedPrimaryKey(table) {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all();
+  return (
+    columns.some((entry) => entry.name === "user_id" && entry.pk > 0) &&
+    columns.some((entry) => entry.name === "id" && entry.pk > 0)
+  );
+}
+
+function createPreUserMigrationBackup() {
+  if (!databaseExistedBeforeStartup) {
+    return null;
+  }
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const backupPath = join(dirname(dbPath), `workout.pre-users.${timestamp}.sqlite`);
+  const escapedBackupPath = backupPath.replaceAll("'", "''");
+
+  db.exec("PRAGMA wal_checkpoint(FULL)");
+  db.exec(`VACUUM INTO '${escapedBackupPath}'`);
+  return backupPath;
+}
+
+function migrateUserScopedData() {
+  const scopedTables = ["exercises", "plans", "sessions", "coach_messages"];
+  const needsMigration =
+    scopedTables.some((table) => !hasUserScopedPrimaryKey(table)) ||
+    !hasTable("user_settings") ||
+    !hasTable("user_profiles");
+
+  if (!needsMigration) {
+    return;
+  }
+
+  const backupPath = createPreUserMigrationBackup();
+
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    for (const table of ["exercises", "plans", "sessions"]) {
+      if (hasUserScopedPrimaryKey(table)) {
+        continue;
+      }
+
+      const userIdExpression = hasColumn(table, "user_id")
+        ? `COALESCE(user_id, '${ownerUserId}')`
+        : `'${ownerUserId}'`;
+      db.exec(`
+        CREATE TABLE ${table}_user_migration (
+          user_id TEXT NOT NULL,
+          id TEXT NOT NULL,
+          data TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (user_id, id)
+        );
+        INSERT INTO ${table}_user_migration (user_id, id, data, updated_at)
+          SELECT ${userIdExpression}, id, data, updated_at FROM ${table};
+        DROP TABLE ${table};
+        ALTER TABLE ${table}_user_migration RENAME TO ${table};
+      `);
+    }
+
+    if (!hasUserScopedPrimaryKey("coach_messages")) {
+      const coachUserIdExpression = hasColumn("coach_messages", "user_id")
+        ? `COALESCE(user_id, '${ownerUserId}')`
+        : `'${ownerUserId}'`;
+      db.exec(`
+        CREATE TABLE coach_messages_user_migration (
+          user_id TEXT NOT NULL,
+          id TEXT NOT NULL,
+          role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+          content TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          provider TEXT,
+          model TEXT,
+          PRIMARY KEY (user_id, id)
+        );
+        INSERT INTO coach_messages_user_migration
+          (user_id, id, role, content, created_at, provider, model)
+          SELECT ${coachUserIdExpression}, id, role, content, created_at, provider, model
+          FROM coach_messages;
+        DROP TABLE coach_messages;
+        ALTER TABLE coach_messages_user_migration RENAME TO coach_messages;
+      `);
+    }
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS user_settings (
+        user_id TEXT PRIMARY KEY,
+        data TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS user_profiles (
+        user_id TEXT PRIMARY KEY,
+        data TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS exercises_user_updated_idx
+        ON exercises (user_id, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS plans_user_updated_idx
+        ON plans (user_id, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS sessions_user_updated_idx
+        ON sessions (user_id, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS coach_messages_user_created_idx
+        ON coach_messages (user_id, created_at DESC);
+      INSERT OR IGNORE INTO user_settings (user_id, data, updated_at)
+        SELECT '${ownerUserId}', data, updated_at FROM settings WHERE id = 1;
+      INSERT OR IGNORE INTO user_profiles (user_id, data, updated_at)
+        SELECT '${ownerUserId}', data, updated_at FROM profile WHERE id = 1;
+    `);
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+
+  if (backupPath) {
+    console.log(`Pre-user migration backup: ${backupPath}`);
+  }
+}
+
+migrateUserScopedData();
 
 function jsonResponse(response, statusCode, body, headers = {}) {
   response.writeHead(statusCode, {
@@ -282,36 +457,47 @@ function safeEqual(left, right) {
   return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
 }
 
-function createSessionToken() {
+function createSessionToken(userId) {
   const payload = Buffer.from(
-    JSON.stringify({ exp: Date.now() + sessionMaxAgeSeconds * 1000 }),
+    JSON.stringify({
+      sub: userId,
+      exp: Date.now() + sessionMaxAgeSeconds * 1000,
+    }),
   ).toString("base64url");
   return `${payload}.${signPayload(payload)}`;
 }
 
-function isAuthenticated(request) {
+function getAuthenticatedUser(request) {
   if (!authEnabled) {
-    return true;
+    return ownerUser;
   }
 
   const token = parseCookies(request.headers.cookie)[sessionCookieName];
 
   if (!token) {
-    return false;
+    return null;
   }
 
   const [payload, signature] = token.split(".");
 
   if (!payload || !signature || !safeEqual(signPayload(payload), signature)) {
-    return false;
+    return null;
   }
 
   try {
     const session = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
-    return typeof session.exp === "number" && session.exp > Date.now();
+    if (typeof session.exp !== "number" || session.exp <= Date.now()) {
+      return null;
+    }
+
+    return configuredUsers.find((user) => user.id === session.sub) ?? null;
   } catch {
-    return false;
+    return null;
   }
+}
+
+function publicUser(user) {
+  return user ? { id: user.id, login: user.login } : null;
 }
 
 function sessionCookie(value, maxAge = sessionMaxAgeSeconds) {
@@ -321,33 +507,50 @@ function sessionCookie(value, maxAge = sessionMaxAgeSeconds) {
 
 async function handleAuth(request, response, pathname) {
   if (request.method === "GET" && pathname === "/api/auth/status") {
+    const user = getAuthenticatedUser(request);
     jsonResponse(response, 200, {
       authEnabled,
-      authenticated: isAuthenticated(request),
+      authenticated: Boolean(user),
+      user: authEnabled ? publicUser(user) : null,
     });
     return true;
   }
 
   if (request.method === "POST" && pathname === "/api/auth/login") {
     if (!authEnabled) {
-      jsonResponse(response, 200, { authEnabled, authenticated: true });
+      jsonResponse(response, 200, {
+        authEnabled,
+        authenticated: true,
+        user: publicUser(ownerUser),
+      });
       return true;
     }
 
     const body = await readBody(request);
+    const login = body && typeof body.login === "string" ? body.login.trim() : "";
     const password = body && typeof body.password === "string" ? body.password : "";
-    const verified = password.length > 0 && (await argon2.verify(passwordHash, password));
+    const user = configuredUsers.find(
+      (candidate) => candidate.login.localeCompare(login, undefined, { sensitivity: "accent" }) === 0,
+    );
+    const verified =
+      Boolean(user) &&
+      password.length > 0 &&
+      (await argon2.verify(user.passwordHash, password));
 
     if (!verified) {
-      jsonResponse(response, 401, { error: "Invalid password" });
+      jsonResponse(response, 401, { error: "Invalid login or password" });
       return true;
     }
 
     jsonResponse(
       response,
       200,
-      { authEnabled, authenticated: true },
-      { "Set-Cookie": sessionCookie(createSessionToken()) },
+      {
+        authEnabled,
+        authenticated: true,
+        user: publicUser(user),
+      },
+      { "Set-Cookie": sessionCookie(createSessionToken(user.id)) },
     );
     return true;
   }
@@ -356,7 +559,7 @@ async function handleAuth(request, response, pathname) {
     jsonResponse(
       response,
       200,
-      { authEnabled, authenticated: false },
+      { authEnabled, authenticated: false, user: null },
       { "Set-Cookie": sessionCookie("", 0) },
     );
     return true;
@@ -396,15 +599,15 @@ function tableName(table) {
   return table;
 }
 
-function readCollection(table) {
+function readCollection(table, userId) {
   const resolvedTable = tableName(table);
   return db
-    .prepare(`SELECT data FROM ${resolvedTable} ORDER BY updated_at DESC`)
-    .all()
+    .prepare(`SELECT data FROM ${resolvedTable} WHERE user_id = ? ORDER BY updated_at DESC`)
+    .all(userId)
     .map((row) => JSON.parse(row.data));
 }
 
-function writeCollection(table, items) {
+function writeCollection(table, items, userId) {
   if (!Array.isArray(items)) {
     throw new TypeError(`${table} payload must be an array.`);
   }
@@ -412,19 +615,24 @@ function writeCollection(table, items) {
   const resolvedTable = tableName(table);
   const now = new Date().toISOString();
   const insert = db.prepare(
-    `INSERT INTO ${resolvedTable} (id, data, updated_at) VALUES (?, ?, ?)`,
+    `INSERT INTO ${resolvedTable} (user_id, id, data, updated_at) VALUES (?, ?, ?, ?)`,
   );
 
   db.exec("BEGIN IMMEDIATE");
   try {
-    db.prepare(`DELETE FROM ${resolvedTable}`).run();
+    db.prepare(`DELETE FROM ${resolvedTable} WHERE user_id = ?`).run(userId);
 
     for (const item of items) {
       if (!item || typeof item.id !== "string" || item.id.trim().length === 0) {
         throw new TypeError(`${table} items must have an id.`);
       }
 
-      insert.run(item.id, JSON.stringify(item), item.updatedAt ?? item.completedAt ?? now);
+      insert.run(
+        userId,
+        item.id,
+        JSON.stringify(item),
+        item.updatedAt ?? item.completedAt ?? now,
+      );
     }
 
     db.exec("COMMIT");
@@ -528,8 +736,8 @@ function normalizeExerciseCategories(categories, fallbackLanguage = "fr") {
     : defaultSettings.exerciseCategories.map(cloneExerciseCategory);
 }
 
-function readSettings() {
-  const row = db.prepare("SELECT data FROM settings WHERE id = 1").get();
+function readSettings(userId) {
+  const row = db.prepare("SELECT data FROM user_settings WHERE user_id = ?").get(userId);
   const savedSettings = row ? JSON.parse(row.data) : {};
   const notificationMode =
     savedSettings.notificationMode ??
@@ -566,7 +774,7 @@ function readSettings() {
   };
 }
 
-function writeSettings(settings) {
+function writeSettings(settings, userId) {
   if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
     throw new Error("Settings payload must be an object.");
   }
@@ -594,20 +802,24 @@ function writeSettings(settings) {
   const exerciseCategories = normalizeExerciseCategories(settings.exerciseCategories, language);
 
   db.prepare(
-    `INSERT INTO settings (id, data, updated_at)
-     VALUES (1, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
-  ).run(JSON.stringify({
-    ...defaultSettings,
-    ...settings,
-    notificationMode,
-    voiceProvider,
-    voiceLanguage,
-    voiceEnabled: notificationMode === "voice",
-    language,
-    exerciseDefaultsVersion: nextExerciseDefaultsVersion,
-    exerciseCategories,
-  }), new Date().toISOString());
+    `INSERT INTO user_settings (user_id, data, updated_at)
+     VALUES (?, ?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
+  ).run(
+    userId,
+    JSON.stringify({
+      ...defaultSettings,
+      ...settings,
+      notificationMode,
+      voiceProvider,
+      voiceLanguage,
+      voiceEnabled: notificationMode === "voice",
+      language,
+      exerciseDefaultsVersion: nextExerciseDefaultsVersion,
+      exerciseCategories,
+    }),
+    new Date().toISOString(),
+  );
 }
 
 function normalizeProfile(profile) {
@@ -624,67 +836,77 @@ function normalizeProfile(profile) {
   };
 }
 
-function readProfile() {
-  const row = db.prepare("SELECT data FROM profile WHERE id = 1").get();
+function readProfile(userId) {
+  const row = db.prepare("SELECT data FROM user_profiles WHERE user_id = ?").get(userId);
 
   return normalizeProfile(row ? JSON.parse(row.data) : defaultProfile);
 }
 
-function writeProfile(profile) {
+function writeProfile(profile, userId) {
   if (!profile || typeof profile !== "object" || Array.isArray(profile)) {
     throw new Error("Profile payload must be an object.");
   }
 
   const normalizedProfile = normalizeProfile(profile);
   db.prepare(
-    `INSERT INTO profile (id, data, updated_at)
-     VALUES (1, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
-  ).run(JSON.stringify(normalizedProfile), normalizedProfile.updatedAt ?? new Date().toISOString());
+    `INSERT INTO user_profiles (user_id, data, updated_at)
+     VALUES (?, ?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
+  ).run(
+    userId,
+    JSON.stringify(normalizedProfile),
+    normalizedProfile.updatedAt ?? new Date().toISOString(),
+  );
 }
 
-function seedDefaults() {
-  const exerciseCount = db.prepare("SELECT COUNT(*) AS count FROM exercises").get().count;
+function seedDefaults(userId) {
+  const exerciseCount = db
+    .prepare("SELECT COUNT(*) AS count FROM exercises WHERE user_id = ?")
+    .get(userId).count;
 
   if (exerciseCount === 0) {
-    writeCollection("exercises", defaultExercises);
+    writeCollection("exercises", defaultExercises, userId);
   }
 
-  const settingsCount = db.prepare("SELECT COUNT(*) AS count FROM settings").get().count;
+  const settingsCount = db
+    .prepare("SELECT COUNT(*) AS count FROM user_settings WHERE user_id = ?")
+    .get(userId).count;
 
   if (settingsCount === 0) {
-    writeSettings(defaultSettings);
+    writeSettings(defaultSettings, userId);
   }
 
-  const profileCount = db.prepare("SELECT COUNT(*) AS count FROM profile").get().count;
+  const profileCount = db
+    .prepare("SELECT COUNT(*) AS count FROM user_profiles WHERE user_id = ?")
+    .get(userId).count;
 
   if (profileCount === 0) {
-    writeProfile(defaultProfile);
+    writeProfile(defaultProfile, userId);
   }
 }
 
-function readAllData() {
-  seedDefaults();
-  const settings = readSettings();
-  let exercises = readCollection("exercises");
+function readAllData(userId) {
+  seedDefaults(userId);
+  const settings = readSettings(userId);
+  let exercises = readCollection("exercises", userId);
 
   if (settings.exerciseDefaultsVersion < exerciseDefaultsVersion) {
     exercises = applyExerciseDefaultTargets(exercises);
-    writeCollection("exercises", exercises);
+    writeCollection("exercises", exercises, userId);
     settings.exerciseDefaultsVersion = exerciseDefaultsVersion;
-    writeSettings(settings);
+    writeSettings(settings, userId);
   }
 
   return {
     exercises,
-    plans: readCollection("plans"),
-    sessions: readCollection("sessions"),
+    plans: readCollection("plans", userId),
+    sessions: readCollection("sessions", userId),
     settings,
-    profile: readProfile(),
+    profile: readProfile(userId),
   };
 }
 
-function writeAllData(data) {
+function writeAllData(data, userId) {
   const settings = data.settings ?? defaultSettings;
   const importedExerciseDefaultsVersion = Number.isFinite(settings.exerciseDefaultsVersion)
     ? Math.max(0, Math.round(Number(settings.exerciseDefaultsVersion)))
@@ -694,14 +916,14 @@ function writeAllData(data) {
       ? applyExerciseDefaultTargets(data.exercises ?? [])
       : data.exercises ?? [];
 
-  writeCollection("exercises", exercises);
-  writeCollection("plans", data.plans ?? []);
-  writeCollection("sessions", data.sessions ?? []);
+  writeCollection("exercises", exercises, userId);
+  writeCollection("plans", data.plans ?? [], userId);
+  writeCollection("sessions", data.sessions ?? [], userId);
   writeSettings({
     ...settings,
     exerciseDefaultsVersion: Math.max(importedExerciseDefaultsVersion, exerciseDefaultsVersion),
-  });
-  writeProfile(data.profile ?? defaultProfile);
+  }, userId);
+  writeProfile(data.profile ?? defaultProfile, userId);
 }
 
 function createId(prefix) {
@@ -728,7 +950,7 @@ function getCoachConfig() {
   };
 }
 
-function readCoachMessagePage(beforeCursor, limit = 80) {
+function readCoachMessagePage(userId, beforeCursor, limit = 80) {
   const resolvedLimit = Math.max(1, Math.min(200, Math.round(Number(limit) || 80)));
   const parsedBeforeCursor = Number(beforeCursor);
   const hasBeforeCursor = Number.isFinite(parsedBeforeCursor) && parsedBeforeCursor > 0;
@@ -737,15 +959,20 @@ function readCoachMessagePage(beforeCursor, limit = 80) {
       hasBeforeCursor
         ? `SELECT rowid AS cursor, id, role, content, created_at AS createdAt, provider, model
            FROM coach_messages
-           WHERE rowid < ?
+           WHERE user_id = ? AND rowid < ?
            ORDER BY rowid DESC
            LIMIT ?`
         : `SELECT rowid AS cursor, id, role, content, created_at AS createdAt, provider, model
            FROM coach_messages
+           WHERE user_id = ?
            ORDER BY rowid DESC
            LIMIT ?`,
     )
-    .all(...(hasBeforeCursor ? [parsedBeforeCursor, resolvedLimit + 1] : [resolvedLimit + 1]));
+    .all(
+      ...(hasBeforeCursor
+        ? [userId, parsedBeforeCursor, resolvedLimit + 1]
+        : [userId, resolvedLimit + 1]),
+    );
   const hasMore = rows.length > resolvedLimit;
   const messages = rows.slice(0, resolvedLimit).reverse();
 
@@ -756,11 +983,11 @@ function readCoachMessagePage(beforeCursor, limit = 80) {
   };
 }
 
-function readCoachMessages(limit = 80) {
-  return readCoachMessagePage(limit).messages;
+function readCoachMessages(userId, limit = 80) {
+  return readCoachMessagePage(userId, undefined, limit).messages;
 }
 
-function writeCoachMessage(role, content, provider, model) {
+function writeCoachMessage(userId, role, content, provider, model) {
   const message = {
     id: createId("coach-message"),
     role,
@@ -771,15 +998,15 @@ function writeCoachMessage(role, content, provider, model) {
   };
 
   db.prepare(
-    `INSERT INTO coach_messages (id, role, content, created_at, provider, model)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-  ).run(message.id, role, content, message.createdAt, provider ?? null, model ?? null);
+    `INSERT INTO coach_messages (user_id, id, role, content, created_at, provider, model)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).run(userId, message.id, role, content, message.createdAt, provider ?? null, model ?? null);
 
   return message;
 }
 
-function clearCoachMessages() {
-  db.prepare("DELETE FROM coach_messages").run();
+function clearCoachMessages(userId) {
+  db.prepare("DELETE FROM coach_messages WHERE user_id = ?").run(userId);
 }
 
 function createCoachSystemPrompt(language) {
@@ -804,13 +1031,13 @@ function createCoachSystemPrompt(language) {
   ].join("\n");
 }
 
-function createCoachDataSnapshot() {
-  const profile = readProfile();
+function createCoachDataSnapshot(userId) {
+  const profile = readProfile(userId);
   const measurements = [...profile.measurements]
     .sort((a, b) => new Date(b.measuredAt).getTime() - new Date(a.measuredAt).getTime())
     .slice(0, 6);
-  const settings = readSettings();
-  const exercises = readCollection("exercises").map((exercise) => ({
+  const settings = readSettings(userId);
+  const exercises = readCollection("exercises", userId).map((exercise) => ({
     id: exercise.id,
     name: exercise.name,
     category: exercise.category,
@@ -819,7 +1046,7 @@ function createCoachDataSnapshot() {
     defaultReps: exercise.defaultReps,
     defaultDistanceMeters: exercise.defaultDistanceMeters,
   }));
-  const recentSessions = readCollection("sessions")
+  const recentSessions = readCollection("sessions", userId)
     .slice(0, 5)
     .map((session) => ({
       workoutName: session.workoutName,
@@ -836,7 +1063,7 @@ function createCoachDataSnapshot() {
         round: step.round,
       })),
     }));
-  const builds = readCollection("plans")
+  const builds = readCollection("plans", userId)
     .slice(0, 20)
     .map((plan) => ({
       name: plan.name,
@@ -857,7 +1084,7 @@ function createCoachDataSnapshot() {
       heightCm: profile.heightCm,
       latestMeasurements: measurements,
     },
-    stats: getWorkoutStats(),
+    stats: getWorkoutStats(userId),
     categories: settings.exerciseCategories,
     exercises,
     recentSessions,
@@ -939,8 +1166,8 @@ function findCategory(settings, query) {
   });
 }
 
-function ensureCategory(name, language, labels = {}) {
-  const settings = readSettings();
+function ensureCategory(name, language, labels = {}, userId) {
+  const settings = readSettings(userId);
   const label =
     normalizeCategoryInput(labels[language] ?? name ?? labels.fr ?? labels.en ?? "");
 
@@ -970,7 +1197,7 @@ function ensureCategory(name, language, labels = {}) {
   writeSettings({
     ...settings,
     exerciseCategories,
-  });
+  }, userId);
 
   return { category, created: true };
 }
@@ -989,8 +1216,8 @@ function findExercise(exercises, query) {
   );
 }
 
-function getWorkoutStats() {
-  const sessions = readCollection("sessions");
+function getWorkoutStats(userId) {
+  const sessions = readCollection("sessions", userId);
   const now = new Date();
   const startOfDay = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const addDays = (date, days) => {
@@ -1253,9 +1480,9 @@ const coachTools = [
   },
 ];
 
-function executeCoachTool(name, args, language) {
+function executeCoachTool(name, args, language, userId) {
   if (name === "get_profile") {
-    const profile = readProfile();
+    const profile = readProfile(userId);
     const measurements = [...profile.measurements]
       .sort((a, b) => new Date(b.measuredAt).getTime() - new Date(a.measuredAt).getTime())
       .slice(0, 12);
@@ -1264,12 +1491,12 @@ function executeCoachTool(name, args, language) {
   }
 
   if (name === "get_workout_stats") {
-    return { dataChanged: false, result: getWorkoutStats() };
+    return { dataChanged: false, result: getWorkoutStats(userId) };
   }
 
   if (name === "get_recent_sessions") {
     const limit = Math.max(1, Math.min(20, Math.round(Number(args.limit) || 10)));
-    const sessions = readCollection("sessions").slice(0, limit).map((session) => ({
+    const sessions = readCollection("sessions", userId).slice(0, limit).map((session) => ({
       id: session.id,
       workoutPlanId: session.workoutPlanId,
       workoutName: session.workoutName,
@@ -1291,13 +1518,13 @@ function executeCoachTool(name, args, language) {
   }
 
   if (name === "list_categories") {
-    return { dataChanged: false, result: readSettings().exerciseCategories };
+    return { dataChanged: false, result: readSettings(userId).exerciseCategories };
   }
 
   if (name === "list_exercises") {
     return {
       dataChanged: false,
-      result: readCollection("exercises").map((exercise) => ({
+      result: readCollection("exercises", userId).map((exercise) => ({
         id: exercise.id,
         name: exercise.name,
         category: exercise.category,
@@ -1313,7 +1540,7 @@ function executeCoachTool(name, args, language) {
   if (name === "list_builds") {
     return {
       dataChanged: false,
-      result: readCollection("plans").map((plan) => ({
+      result: readCollection("plans", userId).map((plan) => ({
         id: plan.id,
         name: plan.name,
         rounds: plan.rounds,
@@ -1330,7 +1557,12 @@ function executeCoachTool(name, args, language) {
   }
 
   if (name === "create_category") {
-    const { category, created } = ensureCategory(args.name, language, args.labels ?? {});
+    const { category, created } = ensureCategory(
+      args.name,
+      language,
+      args.labels ?? {},
+      userId,
+    );
     return { dataChanged: created, result: { category, created } };
   }
 
@@ -1341,25 +1573,27 @@ function executeCoachTool(name, args, language) {
       throw new Error("Exercise name is required.");
     }
 
-    const exercises = readCollection("exercises");
+    const exercises = readCollection("exercises", userId);
     const existingExercise = findExercise(exercises, exerciseName);
 
     if (existingExercise) {
       return { dataChanged: false, result: { exercise: existingExercise, created: false } };
     }
 
-    const settings = readSettings();
+    const settings = readSettings(userId);
     let category = args.categoryId ? findCategory(settings, args.categoryId) : undefined;
     let categoryCreated = false;
 
     if (!category && args.categoryName) {
-      const createdCategory = ensureCategory(args.categoryName, language);
+      const createdCategory = ensureCategory(args.categoryName, language, {}, userId);
       category = createdCategory.category;
       categoryCreated = createdCategory.created;
     }
 
     if (!category) {
-      category = findCategory(readSettings(), "other") ?? readSettings().exerciseCategories[0];
+      const latestSettings = readSettings(userId);
+      category =
+        findCategory(latestSettings, "other") ?? latestSettings.exerciseCategories[0];
     }
 
     if (!category) {
@@ -1390,7 +1624,7 @@ function executeCoachTool(name, args, language) {
       updatedAt: now,
     };
 
-    writeCollection("exercises", [exercise, ...exercises]);
+    writeCollection("exercises", [exercise, ...exercises], userId);
     return {
       dataChanged: true,
       result: { exercise, created: true, categoryCreated },
@@ -1410,7 +1644,7 @@ function executeCoachTool(name, args, language) {
       throw new Error("A build needs at least one step.");
     }
 
-    const exercises = readCollection("exercises");
+    const exercises = readCollection("exercises", userId);
     const steps = rawSteps.map((step, index) => {
       const exercise =
         (step.exerciseId ? findExercise(exercises, step.exerciseId) : undefined) ??
@@ -1469,7 +1703,7 @@ function executeCoachTool(name, args, language) {
       updatedAt: now,
     };
 
-    writeCollection("plans", [plan, ...readCollection("plans")]);
+    writeCollection("plans", [plan, ...readCollection("plans", userId)], userId);
     return { dataChanged: true, result: { plan, created: true } };
   }
 
@@ -1534,7 +1768,7 @@ async function requestCoachCompletion(config, messages, language) {
   return message;
 }
 
-async function runCoachConversation(userMessages, language) {
+async function runCoachConversation(userMessages, language, userId) {
   const config = getCoachConfig();
 
   if (!config.enabled) {
@@ -1545,7 +1779,9 @@ async function runCoachConversation(userMessages, language) {
     { role: "system", content: createCoachSystemPrompt(language) },
     {
       role: "system",
-      content: `Current Workout app data snapshot as JSON:\n${JSON.stringify(createCoachDataSnapshot())}`,
+      content: `Current Workout app data snapshot as JSON:\n${JSON.stringify(
+        createCoachDataSnapshot(userId),
+      )}`,
     },
     ...userMessages.map((message) => ({
       role: message.role,
@@ -1603,7 +1839,7 @@ async function runCoachConversation(userMessages, language) {
 
       try {
         args = toolCall.function?.arguments ? JSON.parse(toolCall.function.arguments) : {};
-        const toolResult = executeCoachTool(toolName, args, language);
+        const toolResult = executeCoachTool(toolName, args, language, userId);
         dataChanged = dataChanged || toolResult.dataChanged;
         messages.push({
           role: "tool",
@@ -1640,7 +1876,7 @@ async function runCoachConversation(userMessages, language) {
   };
 }
 
-async function handleCoachApi(request, response, pathname) {
+async function handleCoachApi(request, response, pathname, userId) {
   const config = getCoachConfig();
 
   if (request.method === "GET" && pathname === "/api/coach/status") {
@@ -1656,12 +1892,16 @@ async function handleCoachApi(request, response, pathname) {
   if (request.method === "GET" && pathname === "/api/coach/messages") {
     const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
 
-    jsonResponse(response, 200, readCoachMessagePage(url.searchParams.get("before")));
+    jsonResponse(
+      response,
+      200,
+      readCoachMessagePage(userId, url.searchParams.get("before")),
+    );
     return true;
   }
 
   if (request.method === "POST" && pathname === "/api/coach/clear") {
-    clearCoachMessages();
+    clearCoachMessages(userId);
     jsonResponse(response, 200, { messages: [], hasMore: false });
     return true;
   }
@@ -1685,7 +1925,7 @@ async function handleCoachApi(request, response, pathname) {
     }
 
     const conversation = [
-      ...readCoachMessages(29),
+      ...readCoachMessages(userId, 29),
       {
         id: createId("coach-message"),
         role: "user",
@@ -1697,13 +1937,13 @@ async function handleCoachApi(request, response, pathname) {
     ];
 
     try {
-      const result = await runCoachConversation(conversation, language);
-      writeCoachMessage("user", content, config.provider, config.model);
-      writeCoachMessage("assistant", result.content, result.provider, result.model);
+      const result = await runCoachConversation(conversation, language, userId);
+      writeCoachMessage(userId, "user", content, config.provider, config.model);
+      writeCoachMessage(userId, "assistant", result.content, result.provider, result.model);
 
       jsonResponse(response, 200, {
         message: result.content,
-        ...readCoachMessagePage(),
+        ...readCoachMessagePage(userId),
         dataChanged: result.dataChanged,
         provider: result.provider,
         model: result.model,
@@ -1734,12 +1974,15 @@ async function handleApi(request, response, pathname) {
     return;
   }
 
-  if (!isAuthenticated(request)) {
+  const authenticatedUser = getAuthenticatedUser(request);
+
+  if (!authenticatedUser) {
     jsonResponse(response, 401, { error: "Authentication required", authRequired: true });
     return;
   }
+  const userId = authenticatedUser.id;
 
-  if (await handleCoachApi(request, response, pathname)) {
+  if (await handleCoachApi(request, response, pathname, userId)) {
     return;
   }
 
@@ -1758,7 +2001,7 @@ async function handleApi(request, response, pathname) {
   }
 
   if (request.method === "GET" && pathname === "/api/data") {
-    jsonResponse(response, 200, readAllData());
+    jsonResponse(response, 200, readAllData(userId));
     return;
   }
 
@@ -1782,28 +2025,28 @@ async function handleApi(request, response, pathname) {
   }
 
   if (request.method === "POST" && pathname === "/api/import") {
-    writeAllData(await readBody(request));
-    jsonResponse(response, 200, readAllData());
+    writeAllData(await readBody(request), userId);
+    jsonResponse(response, 200, readAllData(userId));
     return;
   }
 
   const collectionMatch = pathname.match(/^\/api\/(exercises|plans|sessions)$/);
 
   if (request.method === "PUT" && collectionMatch) {
-    writeCollection(collectionMatch[1], await readBody(request));
-    jsonResponse(response, 200, readCollection(collectionMatch[1]));
+    writeCollection(collectionMatch[1], await readBody(request), userId);
+    jsonResponse(response, 200, readCollection(collectionMatch[1], userId));
     return;
   }
 
   if (request.method === "PUT" && pathname === "/api/settings") {
-    writeSettings(await readBody(request));
-    jsonResponse(response, 200, readSettings());
+    writeSettings(await readBody(request), userId);
+    jsonResponse(response, 200, readSettings(userId));
     return;
   }
 
   if (request.method === "PUT" && pathname === "/api/profile") {
-    writeProfile(await readBody(request));
-    jsonResponse(response, 200, readProfile());
+    writeProfile(await readBody(request), userId);
+    jsonResponse(response, 200, readProfile(userId));
     return;
   }
 

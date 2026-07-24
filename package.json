@@ -7,6 +7,7 @@
     "api": "node server/index.js",
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
+    "test": "node --test server/userIsolation.test.js",
     "preview": "node server/index.js",
     "seed:demo": "node server/seedDemoData.js",
     "start": "node server/index.js"
